@@ -1,0 +1,17 @@
+---
+layout: default
+---
+
+<article class="mx-4 lg:m-auto lg:w-2/3 prose max-w-none">
+  <header class="py-4">
+    <h1 class="mb-2 text-5xl lg:text-5xl tracking-tight text-black font-extrabold">{{ page.title }}</h1>
+    <time class="tracking-tight text-gray-600 font-semibold" datetime="{{ page.date | date:"%Y-%m-%d" }}">{{ page.date | date:"%Y-%m-%d" }}</time>
+    <span class="mx-4 px-4 py-2 border-l-2 border-gray-300 text-gray-500 font-normal">
+      <a href="https://twitter.com/daichirata" class="no-underline">@daichirata</a>
+    </span>
+  </header>
+
+  <div class="text-xl subpixel-antialiased leading-relaxed break-words content">
+    {{ content }}
+  </div>
+</article>
