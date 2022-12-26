@@ -30,7 +30,6 @@ defaults:
 
 exclude:
   - Makefile
-  - CNAME
   - .sass-cache/
   - .jekyll-cache/
   - gemfiles/
