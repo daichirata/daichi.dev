@@ -1,18 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="ja_JP"><generator uri="https://jekyllrb.com/" version="4.3.1">Jekyll</generator><link href="https://daichi.dev/feed.xml" rel="self" type="application/atom+xml" /><link href="https://daichi.dev/" rel="alternate" type="text/html" hreflang="ja_JP" /><updated>2022-12-27T05:23:14+09:00</updated><id>https://daichi.dev/feed.xml</id><title type="html">daichi.dev</title><subtitle>プログラミングや日々開発してる上で感じた事、日常について書いています。</subtitle><entry><title type="html">なぜ今またブログを書き始めるのか</title><link href="https://daichi.dev/posts/2022-12-27-blog-is-back" rel="alternate" type="text/html" title="なぜ今またブログを書き始めるのか" /><published>2022-12-27T00:00:00+09:00</published><updated>2022-12-27T00:00:00+09:00</updated><id>https://daichi.dev/posts/blog-is-back</id><content type="html" xml:base="https://daichi.dev/posts/2022-12-27-blog-is-back"><![CDATA[<p>ブログのような物を書かなくなってもう随分になる。人は仕事や現状に満足するとどんどんブログを書かなくなってしまうと昔誰かが言っていたけどその通りで、自分の場合は子供が生まれた事で子育てに追われる充実感や仕事上の役職やお賃金が上がりプログラマとしてのプレゼンスの向上に執着しなくなっていったというような実感がある。</p>
-
-<p>昔は別にブログという形でアウトプットがなくても仕事で使う場面は多く、例えばファイルシステムやプロセスやネットワーク周りの知識とかカーネルチューニングの方法などは覚えてすぐに活用する機会が沢山あった。今ではコンテナ化してしまって直接触ることが随分と減ってしまったような部分の知識は思ってる以上に容赦なく大量に失われていっている実感がある。</p>
-
-<p>今使っていなくて失われていっているのは淘汰されて消えていく運命にある知識も沢山あるのでまあ良いのだけど、基礎となる知識は知っているか知らないかで大きく差が出る瞬間が絶対にある知識なので、今使わないから忘れちゃっていいなとはならないよなぁというぼんやりとした不安を最近はずっと抱えていた。</p>
-
-<p>最近たまたま昔に書いた自分のブログを読み返すことがあり、そこで驚いたのは自分で書いた文章には自分が思っている以上に当時のコンテキストが埋まっているという点だ。当時使っていたミドルウェアに関する物で今はもう使わなくなっており頭から完全に抜け落ちていたのだけど、何年も前で一切覚えてなかったことに関してもやっぱり手を動かして自分で書いた記事だと思った以上に当時の記憶が残っている様で、自分で書いた記事ってこんなに便利だったっけという、まあ何を今更当たり前の事を言っているんだという感じではあるけど。</p>
-
-<p>というわけで、昔は結局有名になりたいとかそういう邪な目的でしかブログを書いてなくてこんなにも当たり前の事に対して今更という感じではあるけど、これまで自分の中に蓄えてきた知識や新しく学んだことに対してしばらくの間は積極的にブログを書いてみようと思う。</p>
-
-<p>自分が社会人になりたての頃はまだまだアルファブロガーと呼ばれる人たちが元気に活動していて、はてなダイアリーではまだまだ設計論やプログラミングのテクニックについての記事が新しく生み出されていた。まだ新人だった当時、ワナビーだった自分の目線からはロックスター的なプログラマが沢山いて、<code class="language-plaintext highlighter-rouge">id:amachang</code> さんや <code class="language-plaintext highlighter-rouge">id:naoya</code> さんは憧れでありヒーローだった。<code class="language-plaintext highlighter-rouge">id:r7kamura</code> さんや <code class="language-plaintext highlighter-rouge">id:mizchi</code> さんなど当時目立ってた同年代の人達には負けたくないと思っていた事なんかも思い出す。当時から未だに走り続けてる凄い人もいて随分とアウトプットに差が開いてしまったなと実感する事もあるけど、もう良い大人なので今度は他人にどう見られるかとかどれだけ見てもらえるかとかそういう事は一切気にせず、ゆっくり落ち着きながら自分の為だけに新しくブログを楽しんでみようと思う。</p>
-
-<p>昔から形から入るタイプなので、心機一転してドメインだけ持ってた <code class="language-plaintext highlighter-rouge">daichi.dev</code> を運用することにして新しくブログのテンプレートを自作した。スタイルは最近定番の <a href="https://tailwindcss.com/">Tailwind CSS</a> を使ってみたが思ったよりも使いやすかったので仕事でも使う機会も出てくるかもしれない。昔のブログに関してはこのブログに redirect するように設定しているけど、再来年のドメインの更新のタイミングくらいで捨てちゃっても良いかなと思っている。</p>
-
-<p>図らずもタイミング的にも来年に向けての抱負みたいになっちゃたけど、とりあえず先ずは月１本を目標に頑張っていこうと思う。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[ブログのような物を書かなくなってもう随分になる。人は仕事や現状に満足するとどんどんブログを書かなくなってしまうと昔誰かが言っていたけどその通りで、自分の場合は子供が生まれた事で子育てに追われる充実感や仕事上の役職やお賃金が上がりプログラマとしてのプレゼンスの向上に執着しなくなっていったというような実感がある。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話</title><link href="https://daichi.dev/posts/2017-12-15-fluent-logger-go" rel="alternate" type="text/html" title="本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話" /><published>2017-12-15T00:00:00+09:00</published><updated>2017-12-15T00:00:00+09:00</updated><id>https://daichi.dev/posts/fluent-logger-go</id><content type="html" xml:base="https://daichi.dev/posts/2017-12-15-fluent-logger-go"><![CDATA[<p>この記事は<a href="https://qiita.com/advent-calendar/2017/go4">Go4 Advent Calendar 2017</a>の12/15のエントリです。</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="ja_JP"><generator uri="https://jekyllrb.com/" version="4.3.1">Jekyll</generator><link href="https://daichi.dev/feed.xml" rel="self" type="application/atom+xml" /><link href="https://daichi.dev/" rel="alternate" type="text/html" hreflang="ja_JP" /><updated>2022-12-27T05:50:21+09:00</updated><id>https://daichi.dev/feed.xml</id><title type="html">daichi.dev</title><subtitle>プログラミングや日々開発してる上で感じた事、日常について書いています。</subtitle><entry><title type="html">本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話</title><link href="https://daichi.dev/posts/2017-12-15-fluent-logger-go" rel="alternate" type="text/html" title="本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話" /><published>2017-12-15T00:00:00+09:00</published><updated>2017-12-15T00:00:00+09:00</updated><id>https://daichi.dev/posts/fluent-logger-go</id><content type="html" xml:base="https://daichi.dev/posts/2017-12-15-fluent-logger-go"><![CDATA[<p>この記事は<a href="https://qiita.com/advent-calendar/2017/go4">Go4 Advent Calendar 2017</a>の12/15のエントリです。</p>
 
 <p><a href="https://qiita.com/advent-calendar/2017/go2">Go2 Advent Calendar 2017</a>の１日目の記事で、<a href="https://medium.com/@lestrrat/go-fluent-client%E3%81%AE%E7%B4%B9%E4%BB%8B-312e90fb0668">go-fluent-clientの紹介</a> という lestrrat さんの投稿があり、そういえば今年の初めに転職やら色々あって導入までは出来なかった Go の fluent-logger 作ったなということを思い出したので、当時どんな感じで作っていたかを踏まえて簡単に紹介してみようと思います。</p>
 
@@ -2259,4 +2245,52 @@ activeかどうかの実装はadapter毎に定義されている(mysql2はping�
 <p>つまり、あるプロセスが最低限１つ持っているプールをそれぞれのスレッドで取り合っている仕組みになっている。
 そのため、unicorn等のプロセスモデルのサーバーなら余り関係のない話だしpumaのようなスレッドモデルのサーバーならプールの調整が大切なのである。</p>
 
-<p>これらの仕組みを元に、既存のライブラリがどのようにしてShardingを実現しているかはまた次回。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[ActiveRecordのShardingライブラリを設計する際に、対応する必要があるコネクション管理と実際にコネクションがどのように使用されているのかの部分について書き留めておく。 対象のバージョンは4.2.4だけど4系なら大体同じなので問題ないと思う。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry></feed>
+<p>これらの仕組みを元に、既存のライブラリがどのようにしてShardingを実現しているかはまた次回。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[ActiveRecordのShardingライブラリを設計する際に、対応する必要があるコネクション管理と実際にコネクションがどのように使用されているのかの部分について書き留めておく。 対象のバージョンは4.2.4だけど4系なら大体同じなので問題ないと思う。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">passengerがaptでインストール出来ない</title><link href="https://daichi.dev/posts/2015-06-22-passenger-apt" rel="alternate" type="text/html" title="passengerがaptでインストール出来ない" /><published>2015-06-22T00:00:00+09:00</published><updated>2015-06-22T00:00:00+09:00</updated><id>https://daichi.dev/posts/passenger-apt</id><content type="html" xml:base="https://daichi.dev/posts/2015-06-22-passenger-apt"><![CDATA[<p>Ubuntu14.04でpassengerをインストールしようとしたらエラーが出た。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>vagrant@vagrant-ubuntu-trusty-64:~<span class="nv">$ </span><span class="nb">sudo </span>apt-get <span class="nb">install</span> <span class="nt">-y</span> nginx-extras passenger
+Reading package lists... Done
+Building dependency tree
+Reading state information... Done
+The following extra packages will be installed:
+  fontconfig-config fonts-dejavu-core libfontconfig1 libgd3 libjbig0
+  libjpeg-turbo8 libjpeg8 liblua5.1-0 libperl5.18 libtiff5 libvpx1
+  nginx-common passenger-dev passenger-doc
+Suggested packages:
+  libgd-tools fcgiwrap nginx-doc ssl-cert
+The following NEW packages will be installed:
+  fontconfig-config fonts-dejavu-core libfontconfig1 libgd3 libjbig0
+  libjpeg-turbo8 libjpeg8 liblua5.1-0 libperl5.18 libtiff5 libvpx1
+  nginx-common nginx-extras passenger passenger-dev passenger-doc
+0 upgraded, 16 newly installed, 0 to remove and 2 not upgraded.
+Need to get 6,695 kB/8,970 kB of archives.
+After this operation, 52.3 MB of additional disk space will be used.
+Get:1 https://oss-binaries.phusionpassenger.com/apt/passenger/ trusty/main nginx-common all 1:1.6.3-8.5.0.8~trusty1 <span class="o">[</span>36.3 kB]
+Err https://oss-binaries.phusionpassenger.com/apt/passenger/ trusty/main nginx-common all 1:1.6.3-8.5.0.8~trusty1
+  HttpError500
+Err https://oss-binaries.phusionpassenger.com/apt/passenger/ trusty/main passenger amd64 1:5.0.8-1~trusty1
+  HttpError500
+Err https://oss-binaries.phusionpassenger.com/apt/passenger/ trusty/main passenger-dev amd64 1:5.0.8-1~trusty1
+  HttpError500
+Err https://oss-binaries.phusionpassenger.com/apt/passenger/ trusty/main passenger-doc all 1:5.0.8-1~trusty1
+  HttpError500
+Err https://oss-binaries.phusionpassenger.com/apt/passenger/ trusty/main nginx-extras amd64 1:1.6.3-8.5.0.8~trusty1
+  HttpError500
+E: Failed to fetch https://oss-binaries.phusionpassenger.com/apt/passenger/pool/trusty/main/n/nginx/nginx-common_1.6.3-8.5.0.8~trusty1_all.deb  HttpError500
+
+E: Failed to fetch https://oss-binaries.phusionpassenger.com/apt/passenger/pool/trusty/main/p/passenger/passenger_5.0.8-1~trusty1_amd64.deb  HttpError500
+
+E: Failed to fetch https://oss-binaries.phusionpassenger.com/apt/passenger/pool/trusty/main/p/passenger/passenger-dev_5.0.8-1~trusty1_amd64.deb  HttpError500
+
+E: Failed to fetch https://oss-binaries.phusionpassenger.com/apt/passenger/pool/trusty/main/p/passenger/passenger-doc_5.0.8-1~trusty1_all.deb  HttpError500
+
+E: Failed to fetch https://oss-binaries.phusionpassenger.com/apt/passenger/pool/trusty/main/n/nginx/nginx-extras_1.6.3-8.5.0.8~trusty1_amd64.deb  HttpError500
+
+E: Unable to fetch some archives, maybe run apt-get update or try with <span class="nt">--fix-missing</span>?
+</code></pre></div></div>
+
+<p><a href="https://blog.phusion.nl/2015/03/08/passenger-4-apt-repository-now-available/">passenger5の公開に伴ってリポジトリが変わった</a>らしい。が、公式のドキュメントも変更されてないし既存の広く使われているリポジトリに対するこういう変更は辛みしか無いんじゃないだろうか。OSS版はsource.listに</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>deb https://oss-binaries.phusionpassenger.com/apt/passenger/4 &lt;CODENAME&gt; main
+</code></pre></div></div>
+
+<p>を指定すれば良いとのこと。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[Ubuntu14.04でpassengerをインストールしようとしたらエラーが出た。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry></feed>
