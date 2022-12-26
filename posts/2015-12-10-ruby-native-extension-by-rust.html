@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title>RustだけでRuby native extensionを書く</title>
+    <link rel="shortcut icon" href="/assets/images/favicon.ico">
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<meta name="generator" content="Jekyll v4.3.1" />
+<meta property="og:title" content="RustだけでRuby native extensionを書く" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="description" content="この記事は Rust Advent Calendar 2015 10日目の記事です。" />
+<meta property="og:description" content="この記事は Rust Advent Calendar 2015 10日目の記事です。" />
+<link rel="canonical" href="https://daichi.dev/posts/2015-12-10-ruby-native-extension-by-rust" />
+<meta property="og:url" content="https://daichi.dev/posts/2015-12-10-ruby-native-extension-by-rust" />
+<meta property="og:site_name" content="daichi.dev" />
+<meta property="og:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2015-12-10T00:00:00+09:00" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta property="twitter:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="twitter:title" content="RustだけでRuby native extensionを書く" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2015-12-10T00:00:00+09:00","datePublished":"2015-12-10T00:00:00+09:00","description":"この記事は Rust Advent Calendar 2015 10日目の記事です。","headline":"RustだけでRuby native extensionを書く","image":"https://daichi.dev/assets/images/og.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://daichi.dev/posts/2015-12-10-ruby-native-extension-by-rust"},"url":"https://daichi.dev/posts/2015-12-10-ruby-native-extension-by-rust"}</script>
+<!-- End Jekyll SEO tag -->
+
+  </head>
+  <body>
+    <header class="mx-4 lg:m-auto lg:w-2/3 py-6 flex items-center justify-between">
+      <h1><a href="/" class="text-2xl font-extrabold gradation-text">daichi.dev</a></h1>
+      <nav class="flex item-center">
+        <a class="pr-4" href="https://twitter.com/daichirata" target="_blank" rel="noopener noreferrer" title="Twitter"><svg height="25" width="25" viewBox="0 0 512 512"><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z" fill="#454C51"></path></svg></a>
+        <a href="https://github.com/daichirata" target="_blank" rel="noopener noreferrer" title="GitHub"><svg height="25" width="25" viewBox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" fill="#454C51"></path></svg></a>
+      </nav>
+    </header>
+    <article class="mx-4 lg:m-auto lg:w-2/3 prose max-w-none">
+  <header class="py-8">
+    <h1 class="mb-2 text-5xl lg:text-5xl tracking-tight text-black font-extrabold">RustだけでRuby native extensionを書く</h1>
+    <time class="tracking-tight text-gray-600 font-semibold" datetime="2015-12-10">2015-12-10</time>
+    <span class="mx-4 px-4 py-2 border-l-2 border-gray-300 text-gray-500 font-normal">
+      <a href="https://twitter.com/daichirata" class="no-underline">@daichirata</a>
+    </span>
+  </header>
+
+  <div class="text-xl subpixel-antialiased leading-relaxed break-words content">
+    <p>この記事は <a href="http://qiita.com/advent-calendar/2015/rust-lang">Rust Advent Calendar 2015</a> 10日目の記事です。</p>
+
+<p>Rustは共有ライブラリを生成してCのプログラムとリンクすることが可能らしいので、Rubyからrequireしてちゃんと動くnative extensionをRustだけを使って書いてみる。</p>
+
+<p>既に似たようなことを<a href="https://www.youtube.com/watch?v=IqrwPVtSHZI">やっている例</a>はあるんだけど、Cファイルを用意してそこからRustを呼び出す形になっているので、今回はCを書かずにやってみたいと思う。ちなみに実用性は特に無いのであしからず。</p>
+
+<h2 id="dylib">Dylib</h2>
+
+<p>Rustで共有ライブラリを作成してCから呼び出すには、以下のようにすればよい。</p>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">#![crate_type</span> <span class="nd">=</span> <span class="s">"dylib"</span><span class="nd">]</span>
+
+<span class="nd">#[no_mangle]</span>
+<span class="k">pub</span> <span class="k">extern</span> <span class="k">fn</span> <span class="nf">rust_test</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="nb">i32</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nd">println!</span><span class="p">(</span><span class="s">"rust_test {0}"</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">#[no_mangle]</code>でマングリング前の関数名をシンボルテーブルに登録し、<code class="language-plaintext highlighter-rouge">extern</code>でC ABIを用いるようにする。後はこのファイルを<code class="language-plaintext highlighter-rouge">rustc</code>を使ってコンパイルする。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rustc test.rs
+</code></pre></div></div>
+
+<p>この共有ライブラリをリンクするC側のコードは特別なことをする必要は無い。</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdint.h&gt;</span><span class="cp">
+</span>
+<span class="kt">void</span> <span class="nf">rust_test</span><span class="p">(</span><span class="kt">int32_t</span> <span class="n">i</span><span class="p">);</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">rust_test</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>あとは以下のようにコンパイルすれば良い。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>cc <span class="nt">-L</span><span class="nb">.</span> <span class="nt">-ltest</span> test.c <span class="nt">-o</span> <span class="nb">test</span>
+<span class="nv">$ </span>./test
+rust_test 10
+</code></pre></div></div>
+
+<h2 id="ffi">FFI</h2>
+
+<p>RustからCを呼び出すには<a href="http://qiita.com/kondei/items/b448fd7e15a0a1784309">Rustの他言語関数インターフェース（FFI）のガイド - Qiita</a>に日本語訳があるのでそれをみるのがわかりやすいと思う。</p>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">extern</span> <span class="k">crate</span> <span class="n">libc</span><span class="p">;</span>
+<span class="k">use</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">size_t</span><span class="p">;</span>
+
+<span class="nd">#[link(name</span> <span class="nd">=</span> <span class="s">"snappy"</span><span class="nd">)]</span>
+<span class="k">extern</span> <span class="p">{</span>
+    <span class="k">fn</span> <span class="nf">snappy_max_compressed_length</span><span class="p">(</span><span class="n">source_length</span><span class="p">:</span> <span class="nb">size_t</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">size_t</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">x</span> <span class="o">=</span> <span class="k">unsafe</span> <span class="p">{</span> <span class="nf">snappy_max_compressed_length</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span> <span class="p">};</span>
+    <span class="nd">println!</span><span class="p">(</span><span class="s">"max compressed length of a 100 byte buffer: {}"</span><span class="p">,</span> <span class="n">x</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>ざっくりと説明すると、Cの型は<code class="language-plaintext highlighter-rouge">libc</code>というcrateに大体定義されているのでそれを使えば良い。後はexternブロック内に関数シグネチャを定義していく。C側の関数を実際に呼び出す際にはRustの安全機構外の関数を呼ぶことになるので<code class="language-plaintext highlighter-rouge">unsafe</code>ブロックで囲う必要がある。<code class="language-plaintext highlighter-rouge">link</code>attributeを指定すると、指定ライブラリとリンクしたバイナリが生成される。が、今回はリンクさせたくないのでattributeは使用しない。</p>
+
+<h2 id="ruby-native-extension">Ruby native extension</h2>
+
+<p>Rubyのnative extensionはロード時にdlsymで<code class="language-plaintext highlighter-rouge">Init_&lt;file_name&gt;</code>という関数のポインタを取得して実行を試みる。それに合わせた関数を定義してあげるとそこがエントリーポイントになる。</p>
+
+<p>まずは最小構成でrequire出来るライブラリを作成してみる。</p>
+
+<ul>
+  <li>Cargo.toml</li>
+</ul>
+
+<div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nn">[package]</span>
+<span class="py">name</span> <span class="p">=</span> <span class="s">"rust"</span>
+<span class="py">version</span> <span class="p">=</span> <span class="s">"0.1.0"</span>
+
+<span class="nn">[lib]</span>
+<span class="py">name</span> <span class="p">=</span> <span class="s">"rust"</span>
+<span class="py">crate-type</span> <span class="p">=</span> <span class="p">[</span><span class="s">"dylib"</span><span class="p">]</span>
+</code></pre></div></div>
+
+<ul>
+  <li>src/lib.rs</li>
+</ul>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">#![allow(non_snake_case)]</span>
+
+<span class="nd">#[no_mangle]</span>
+<span class="k">pub</span> <span class="k">extern</span> <span class="k">fn</span> <span class="nf">Init_rust</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nd">println!</span><span class="p">(</span><span class="s">"Init_rust"</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>コンパイルして実際にRubyから呼び出してみる。Ruby側でロードしたタイミングで標準出力に文字列が出力されるはず。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>cargo build
+   Compiling rust v0.1.0 <span class="o">(</span>file:///Users/xxxx<span class="o">)</span>
+
+<span class="c"># RubyはDynamic Loadingなファイルをロードする為、.bundleに書き換える</span>
+<span class="nv">$ </span><span class="nb">mv </span>target/debug/librust.dylib rust.bundle
+
+<span class="nv">$ </span>irb <span class="nt">-r</span>./rust
+Init_rust
+irb<span class="o">(</span>main<span class="o">)</span>:001:0&gt;
+</code></pre></div></div>
+
+<p>次に、RustからRubyのクラスを定義してみる。今回からはlibcを使用するためCargo.tomlに下記を追加する。ちなみにポインタのサイズとかはOSXに合わせて決め打ちする。</p>
+
+<ul>
+  <li>Cargo.toml</li>
+</ul>
+
+<div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nn">[dependencies]</span>
+<span class="py">libc</span> <span class="p">=</span> <span class="s">"0.2.2"</span>
+</code></pre></div></div>
+
+<p>次に、src/lib.rsを以下のように書き換える。</p>
+
+<ul>
+  <li>src/lib.rs</li>
+</ul>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">#![allow(non_snake_case,</span> <span class="nd">non_camel_case_types)]</span>
+
+<span class="k">extern</span> <span class="k">crate</span> <span class="n">libc</span><span class="p">;</span>
+<span class="k">use</span> <span class="nn">std</span><span class="p">::</span><span class="nn">ffi</span><span class="p">::</span><span class="n">CString</span><span class="p">;</span>
+
+<span class="k">type</span> <span class="n">VALUE</span> <span class="o">=</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_ulong</span><span class="p">;</span>
+
+<span class="k">extern</span> <span class="p">{</span>
+    <span class="k">static</span> <span class="n">rb_cObject</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">;</span>
+
+    <span class="k">fn</span> <span class="nf">rb_define_class</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="o">*</span><span class="k">const</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_char</span><span class="p">,</span> <span class="n">rb_super</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">VALUE</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="nd">#[no_mangle]</span>
+<span class="k">pub</span> <span class="k">extern</span> <span class="k">fn</span> <span class="nf">Init_rust</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">c_name</span> <span class="o">=</span> <span class="nn">CString</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="s">"Rust"</span><span class="p">)</span><span class="nf">.unwrap</span><span class="p">();</span>
+
+    <span class="k">unsafe</span> <span class="p">{</span> <span class="nf">rb_define_class</span><span class="p">(</span><span class="n">c_name</span><span class="nf">.as_ptr</span><span class="p">(),</span> <span class="n">rb_cObject</span><span class="p">)</span> <span class="p">};</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">VALUE</code>はRubyのデータを扱うC側の型で、構造体に対するポインタ又は値その物。<code class="language-plaintext highlighter-rouge">rb_cObject</code>はC側の外部変数なので、Rustから参照するにはexternブロック内でstaticとして定義する。今回は書き換える必要は無いので<code class="language-plaintext highlighter-rouge">*mut</code>はつけない。<code class="language-plaintext highlighter-rouge">rb_define_class</code>はC側では</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">VALUE</span> <span class="nf">rb_define_class</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">name</span><span class="p">,</span> <span class="n">VALUE</span> <span class="n">super</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>という関数なのでそれに対応する関数シグネチャをRust側に定義する。RustからC側の関数に文字列を渡す場合には<code class="language-plaintext highlighter-rouge">std::ffi::CString</code>を経由する必要がある。</p>
+
+<p>これらをlink attributeを使わずにコンパイルする為には、linkerにオプションを渡す必要がある(link-argsはstable releaseでは使えない)。 が、<code class="language-plaintext highlighter-rouge">cargo build</code>ではlinkerにオプションを渡せない仕様になっているので<code class="language-plaintext highlighter-rouge">cargo rustc</code>を使用する。ただ、linkerにオプションを渡すことは推奨されていない。今のrustcはccを使ってるけど、今後はllvmを直接使うかもしれないし他の何かに置き換わった場合それらのオプションが無意味になるから。今回はちょっとしたお遊びなので無視して渡している。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cargo rustc <span class="nt">-Clink-args</span><span class="o">=</span><span class="s1">'-Wl,-undefined,dynamic_lookup'</span>
+   Compiling rust v0.1.0 <span class="o">(</span>file:///Users/xxxxx<span class="o">)</span>
+
+<span class="nb">mv </span>target/debug/librust.dylib ./rust.bundle
+
+<span class="nv">$ </span>irb <span class="nt">-r</span>./rust
+irb<span class="o">(</span>main<span class="o">)</span>:001:0&gt; Rust
+<span class="o">=&gt;</span> Rust
+irb<span class="o">(</span>main<span class="o">)</span>:002:0&gt; Rust.new
+<span class="o">=&gt;</span> <span class="c">#&lt;Rust:0x007fe25200ffa0&gt;</span>
+</code></pre></div></div>
+
+<p>ちゃんとRubyの世界で<code class="language-plaintext highlighter-rouge">Rust</code>が定義されていてインスタンスが生成できる。</p>
+
+<p>後は、必要そうな関数をピックアップしてRust側に外部変数や関数シグネチャなどを追加していけば良い。試しに、よくあるフィボナッチ数を求める関数を持ったクラスを定義してみる。</p>
+
+<ul>
+  <li>src/fib.rs</li>
+</ul>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">pub</span> <span class="k">fn</span> <span class="nf">fib</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">u32</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">u32</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;=</span> <span class="mi">1</span> <span class="p">{</span>
+        <span class="n">n</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="nf">fib</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="nf">fib</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<ul>
+  <li>src/lib.rs</li>
+</ul>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">#![allow(non_snake_case,</span> <span class="nd">non_camel_case_types)]</span>
+
+<span class="k">extern</span> <span class="k">crate</span> <span class="n">libc</span><span class="p">;</span>
+<span class="k">mod</span> <span class="n">fib</span><span class="p">;</span>
+
+<span class="k">use</span> <span class="nn">std</span><span class="p">::</span><span class="nn">ffi</span><span class="p">::</span><span class="n">CString</span><span class="p">;</span>
+
+<span class="k">type</span> <span class="n">VALUE</span> <span class="o">=</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_ulong</span><span class="p">;</span>
+
+<span class="k">extern</span> <span class="p">{</span>
+    <span class="k">static</span> <span class="n">rb_cObject</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">;</span>
+
+    <span class="k">fn</span> <span class="nf">rb_define_class</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="o">*</span><span class="k">const</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_char</span><span class="p">,</span> <span class="n">rb_super</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">VALUE</span><span class="p">;</span>
+
+    <span class="k">fn</span> <span class="nf">rb_define_method</span><span class="p">(</span><span class="n">klass</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">,</span>
+                        <span class="n">name</span><span class="p">:</span> <span class="o">*</span><span class="k">const</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_char</span><span class="p">,</span>
+                        <span class="n">func</span><span class="p">:</span> <span class="k">extern</span> <span class="k">fn</span><span class="p">(</span><span class="n">v</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">,</span> <span class="n">v2</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">),</span>
+                        <span class="n">argc</span><span class="p">:</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_int</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_void</span><span class="p">;</span>
+
+    <span class="k">fn</span> <span class="nf">rb_num2long</span><span class="p">(</span><span class="n">val</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_long</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">rb_int2fix</span><span class="p">(</span><span class="n">num</span><span class="p">:</span> <span class="nb">u32</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">VALUE</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="p">((</span><span class="n">num</span> <span class="k">as</span> <span class="n">VALUE</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">|</span> <span class="mi">0x01</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">extern</span> <span class="k">fn</span> <span class="nf">rb_fib</span><span class="p">(</span><span class="n">_</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">,</span> <span class="n">rb_num</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">num</span> <span class="o">=</span> <span class="k">unsafe</span> <span class="p">{</span> <span class="nf">rb_num2long</span><span class="p">(</span><span class="n">rb_num</span><span class="p">)</span> <span class="p">}</span> <span class="k">as</span> <span class="nb">u32</span><span class="p">;</span>
+    <span class="k">let</span> <span class="n">result</span> <span class="o">=</span> <span class="nn">fib</span><span class="p">::</span><span class="nf">fib</span><span class="p">(</span><span class="n">num</span><span class="p">);</span>
+
+    <span class="nf">rb_int2fix</span><span class="p">(</span><span class="n">result</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="nd">#[no_mangle]</span>
+<span class="k">pub</span> <span class="k">extern</span> <span class="k">fn</span> <span class="nf">Init_rust</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">c_name</span> <span class="o">=</span> <span class="nn">CString</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="s">"Rust"</span><span class="p">)</span><span class="nf">.unwrap</span><span class="p">();</span>
+    <span class="k">let</span> <span class="n">fib</span> <span class="o">=</span> <span class="nn">CString</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="s">"fib"</span><span class="p">)</span><span class="nf">.unwrap</span><span class="p">();</span>
+
+    <span class="k">unsafe</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">rb_cRust</span> <span class="o">=</span> <span class="nf">rb_define_class</span><span class="p">(</span><span class="n">c_name</span><span class="nf">.as_ptr</span><span class="p">(),</span> <span class="n">rb_cObject</span><span class="p">);</span>
+
+        <span class="nf">rb_define_method</span><span class="p">(</span><span class="n">rb_cRust</span><span class="p">,</span> <span class="n">fib</span><span class="nf">.as_ptr</span><span class="p">(),</span> <span class="n">rb_fib</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>実行してみると正しく動いていることが分かる。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>cargo rustc <span class="nt">-Clink-args</span><span class="o">=</span><span class="s1">'-Wl,-undefined,dynamic_lookup'</span>
+   Compiling ruby v0.1.0 <span class="o">(</span>file:///Users/xxxxxxxx<span class="o">)</span>
+
+<span class="nv">$ </span>irb <span class="nt">-r</span> ./target/debug/rust
+irb<span class="o">(</span>main<span class="o">)</span>:001:0&gt; Rust.new.fib<span class="o">(</span>10<span class="o">)</span>
+<span class="o">=&gt;</span> 55
+</code></pre></div></div>
+
+<p>今回作成したファイルは<a href="https://github.com/daichirata/rust_ruby_extension">daichirata/rust_ruby_extention</a>に置いてる。</p>
+
+<h2 id="つらいところ">つらいところ</h2>
+
+<p>CのヘッダーからRustの定義ファイルを生成する<a href="https://github.com/crabtw/rust-bindgen">crabtw/rust-bindgen</a>というツールが一応あって、このツールを元にRubyのヘッダーファイルの定義を出力すると<a href="https://github.com/daichirata/rust_ruby_extension/blob/master/src/bindgen.rs">こうなる。</a>完璧な変換までは難しくて、そのままではエラーになって使うことが出来ないんだけど、結構参考になると思うので一旦出力してこのファイルを見ながらやると捗ると思う。</p>
+
+<p>ただ、当然なんだけどCのマクロには対応していないので、対応するCの関数があれば良いんだけど無かった場合には自分で実装する必要がある。例えばCのintをVALUEに変換する<code class="language-plaintext highlighter-rouge">FIX2LONG</code>マクロとか。Rubyは比較的対応する関数が多い気がするので意外となんとかなるかも？</p>
+
+<p>後、Rustの可変長引数への対応もすごく微妙でやり方がわからなかったので、上の例ではごまかしている部分がある。<code class="language-plaintext highlighter-rouge">rb_define_method</code>というC側の関数は3番目の引数に関数ポインタを受け取るんだけど、引数が可変長引数として定義されている。Rustでもexternブロック内の関数シグネチャには可変長に定義できるっぽいので初めは</p>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">extern</span> <span class="p">{</span>
+    <span class="k">fn</span> <span class="nf">rb_define_method</span><span class="p">(</span><span class="n">klass</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">,</span>
+                        <span class="n">name</span><span class="p">:</span> <span class="o">*</span><span class="k">const</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_char</span><span class="p">,</span>
+                        <span class="n">func</span><span class="p">:</span> <span class="k">extern</span> <span class="k">fn</span><span class="p">(</span><span class="n">v</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">,</span> <span class="o">...</span><span class="p">),</span>
+                        <span class="n">argc</span><span class="p">:</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_int</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_void</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>と定義していたんだけど、rb_fibを渡している部分で型が一致しないとかでコンパイルが通らないので結局あきらめて、2つの引数を受け取る関数のポインタとして定義してお茶をにごしている。bindgenで生成される奴でもよくわからなかったのでこの辺に詳しい人是非教えて下さい。</p>
+
+<h2 id="おまけ">おまけ</h2>
+
+<p>link attributeを使って正攻法でビルドするには、rubyを共有ライブラリ付きでビルドした上でbuild.rsを追加すれば良い。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ RUBY_CONFIGURE_OPTS</span><span class="o">=</span><span class="s2">"--enable-shared"</span> rbenv <span class="nb">install </span>2.2.3
+</code></pre></div></div>
+
+<ul>
+  <li>build.rs</li>
+</ul>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">use</span> <span class="nn">std</span><span class="p">::</span><span class="nn">process</span><span class="p">::</span><span class="n">Command</span><span class="p">;</span>
+
+<span class="k">fn</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">output</span> <span class="o">=</span> <span class="nn">Command</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="s">"ruby"</span><span class="p">)</span>
+        <span class="nf">.arg</span><span class="p">(</span><span class="s">"-e"</span><span class="p">)</span>
+        <span class="nf">.arg</span><span class="p">(</span><span class="s">"puts RbConfig::CONFIG['libdir']"</span><span class="p">)</span>
+        <span class="nf">.output</span><span class="p">()</span>
+        <span class="nf">.unwrap_or_else</span><span class="p">(|</span><span class="n">e</span><span class="p">|</span> <span class="p">{</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"failed to execute process: {}"</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span> <span class="p">});</span>
+
+    <span class="nd">println!</span><span class="p">(</span><span class="s">"cargo:rustc-link-search=native={}"</span><span class="p">,</span> <span class="nn">String</span><span class="p">::</span><span class="nf">from_utf8_lossy</span><span class="p">(</span><span class="o">&amp;</span><span class="n">output</span><span class="py">.stdout</span><span class="p">));</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>後は、externの前の行に<code class="language-plaintext highlighter-rouge">#[link(name = "ruby")]</code>と書けば<code class="language-plaintext highlighter-rouge">cargo build</code>でビルドできる。ただ、librubyにリンクされていて依存関係がある所だけ注意しておいたほうがいい。</p>
+
+  </div>
+</article>
+
+  </body>
+</html>

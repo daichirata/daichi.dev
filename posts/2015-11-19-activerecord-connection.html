@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title>ActiveRecord Connection</title>
+    <link rel="shortcut icon" href="/assets/images/favicon.ico">
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<meta name="generator" content="Jekyll v4.3.1" />
+<meta property="og:title" content="ActiveRecord Connection" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="description" content="ActiveRecordのShardingライブラリを設計する際に、対応する必要があるコネクション管理と実際にコネクションがどのように使用されているのかの部分について書き留めておく。 対象のバージョンは4.2.4だけど4系なら大体同じなので問題ないと思う。" />
+<meta property="og:description" content="ActiveRecordのShardingライブラリを設計する際に、対応する必要があるコネクション管理と実際にコネクションがどのように使用されているのかの部分について書き留めておく。 対象のバージョンは4.2.4だけど4系なら大体同じなので問題ないと思う。" />
+<link rel="canonical" href="https://daichi.dev/posts/2015-11-19-activerecord-connection" />
+<meta property="og:url" content="https://daichi.dev/posts/2015-11-19-activerecord-connection" />
+<meta property="og:site_name" content="daichi.dev" />
+<meta property="og:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2015-11-19T00:00:00+09:00" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta property="twitter:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="twitter:title" content="ActiveRecord Connection" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2015-11-19T00:00:00+09:00","datePublished":"2015-11-19T00:00:00+09:00","description":"ActiveRecordのShardingライブラリを設計する際に、対応する必要があるコネクション管理と実際にコネクションがどのように使用されているのかの部分について書き留めておく。 対象のバージョンは4.2.4だけど4系なら大体同じなので問題ないと思う。","headline":"ActiveRecord Connection","image":"https://daichi.dev/assets/images/og.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://daichi.dev/posts/2015-11-19-activerecord-connection"},"url":"https://daichi.dev/posts/2015-11-19-activerecord-connection"}</script>
+<!-- End Jekyll SEO tag -->
+
+  </head>
+  <body>
+    <header class="mx-4 lg:m-auto lg:w-2/3 py-6 flex items-center justify-between">
+      <h1><a href="/" class="text-2xl font-extrabold gradation-text">daichi.dev</a></h1>
+      <nav class="flex item-center">
+        <a class="pr-4" href="https://twitter.com/daichirata" target="_blank" rel="noopener noreferrer" title="Twitter"><svg height="25" width="25" viewBox="0 0 512 512"><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z" fill="#454C51"></path></svg></a>
+        <a href="https://github.com/daichirata" target="_blank" rel="noopener noreferrer" title="GitHub"><svg height="25" width="25" viewBox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" fill="#454C51"></path></svg></a>
+      </nav>
+    </header>
+    <article class="mx-4 lg:m-auto lg:w-2/3 prose max-w-none">
+  <header class="py-8">
+    <h1 class="mb-2 text-5xl lg:text-5xl tracking-tight text-black font-extrabold">ActiveRecord Connection</h1>
+    <time class="tracking-tight text-gray-600 font-semibold" datetime="2015-11-19">2015-11-19</time>
+    <span class="mx-4 px-4 py-2 border-l-2 border-gray-300 text-gray-500 font-normal">
+      <a href="https://twitter.com/daichirata" class="no-underline">@daichirata</a>
+    </span>
+  </header>
+
+  <div class="text-xl subpixel-antialiased leading-relaxed break-words content">
+    <p>ActiveRecordのShardingライブラリを設計する際に、対応する必要があるコネクション管理と実際にコネクションがどのように使用されているのかの部分について書き留めておく。
+対象のバージョンは4.2.4だけど4系なら大体同じなので問題ないと思う。</p>
+
+<p>データベースへの接続はinitializerで行われる。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/railtie.rb</span>
+
+<span class="n">initializer</span> <span class="s2">"active_record.initialize_database"</span> <span class="k">do</span> <span class="o">|</span><span class="n">app</span><span class="o">|</span>
+  <span class="no">ActiveSupport</span><span class="p">.</span><span class="nf">on_load</span><span class="p">(</span><span class="ss">:active_record</span><span class="p">)</span> <span class="k">do</span>
+    <span class="nb">self</span><span class="p">.</span><span class="nf">configurations</span> <span class="o">=</span> <span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">database_configuration</span>
+
+    <span class="k">begin</span>
+      <span class="n">establish_connection</span>
+    <span class="k">rescue</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">NoDatabaseError</span>
+      <span class="nb">warn</span> <span class="o">&lt;&lt;-</span><span class="no">end_warning</span><span class="sh">
+Oops - You have a database configured, but it doesn't exist yet!
+
+Here's how to get started:
+
+  1. Configure your database in config/database.yml.
+  2. Run `bin/rake db:create` to create the database.
+  3. Run `bin/rake db:setup` to load your database schema.
+</span><span class="no">end_warning</span>
+      <span class="k">raise</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<h2 id="establish_connection">#establish_connection</h2>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/connection_handling.rb</span>
+
+<span class="k">def</span> <span class="nf">establish_connection</span><span class="p">(</span><span class="n">spec</span> <span class="o">=</span> <span class="kp">nil</span><span class="p">)</span>
+  <span class="n">spec</span>     <span class="o">||=</span> <span class="no">DEFAULT_ENV</span><span class="p">.</span><span class="nf">call</span><span class="p">.</span><span class="nf">to_sym</span>
+  <span class="n">resolver</span> <span class="o">=</span>   <span class="no">ConnectionAdapters</span><span class="o">::</span><span class="no">ConnectionSpecification</span><span class="o">::</span><span class="no">Resolver</span><span class="p">.</span><span class="nf">new</span> <span class="n">configurations</span>
+  <span class="n">spec</span>     <span class="o">=</span>   <span class="n">resolver</span><span class="p">.</span><span class="nf">spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+
+  <span class="k">unless</span> <span class="nb">respond_to?</span><span class="p">(</span><span class="n">spec</span><span class="p">.</span><span class="nf">adapter_method</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="no">AdapterNotFound</span><span class="p">,</span> <span class="s2">"database configuration specifies nonexistent </span><span class="si">#{</span><span class="n">spec</span><span class="p">.</span><span class="nf">config</span><span class="p">[</span><span class="ss">:adapter</span><span class="p">]</span><span class="si">}</span><span class="s2"> adapter"</span>
+  <span class="k">end</span>
+
+  <span class="n">remove_connection</span>
+  <span class="n">connection_handler</span><span class="p">.</span><span class="nf">establish_connection</span> <span class="nb">self</span><span class="p">,</span> <span class="n">spec</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>spec周りの処理は本質とは関係ないのでざっくりとした理解で問題ない。environment、Hash、URL(String)のどれかを受け取りHashに展開し直す。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/connection_adapters/abstract/connection_pool.rb</span>
+
+<span class="c1"># ActiveRecord::ConnectionAdapters::ConnectionHandler</span>
+<span class="k">def</span> <span class="nf">establish_connection</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span>
+  <span class="vi">@class_to_pool</span><span class="p">.</span><span class="nf">clear</span>
+  <span class="k">raise</span> <span class="no">RuntimeError</span><span class="p">,</span> <span class="s2">"Anonymous class is not allowed."</span> <span class="k">unless</span> <span class="n">owner</span><span class="p">.</span><span class="nf">name</span>
+  <span class="n">owner_to_pool</span><span class="p">[</span><span class="n">owner</span><span class="p">.</span><span class="nf">name</span><span class="p">]</span> <span class="o">=</span> <span class="no">ConnectionAdapters</span><span class="o">::</span><span class="no">ConnectionPool</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>owner_to_poolの実装は<code class="language-plaintext highlighter-rouge">@owner_to_pool[Process.pid]</code>になっていて、代入の結果以下の構造になる。
+(@owner_to_poolは実際にはThreadSafe::Cacheのインスタンスだが、Hashのように振る舞う)</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>{ 71941 =&gt; { "ActiveRecord::Base" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt; } }
+</code></pre></div></div>
+
+<p>プロセスID毎に、establish_connectionを実行したクラス名 =&gt; プールのHash構造になっている。プロセスごとに保持している理由はforkへの対応。
+クラスオブジェクト自身ではなくクラス名がkeyになっている理由は、
+development modeでクラス再読み込みするのでクラスオブジェクトをそのまま使用していると参照が消えずリークしてしまうから。</p>
+
+<p>それを踏まえ、Railsを起動直後のConnectionHandlerの構造は以下になる。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>#&lt;ActiveRecord::ConnectionAdapters::ConnectionHandler:0x007f835c5da700
+  @class_to_pool=
+    #&lt;ThreadSafe::Cache:0x007f835c5da5e8
+      @backend=
+        { 71941 =&gt;
+          #&lt;ThreadSafe::Cache:0x007f835c6033a8
+            @backend=
+              { "ActiveRecord::Base" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt; }
+            @default_proc=nil&gt; },
+      @default_proc=#&lt;Proc:...&gt;&gt;,
+  @owner_to_pool=
+    #&lt;ThreadSafe::Cache:0x007f835c5da6b0
+      @backend=
+        { 71941 =&gt;
+          #&lt;ThreadSafe::Cache:0x007f835c4ba0f0
+            @backend=
+              { "ActiveRecord::Base" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt; },
+            @default_proc=nil&gt; },
+      @default_proc=#&lt;Proc:...&gt;&gt;
+</code></pre></div></div>
+
+<p>@class_to_poolに関しては、Modelがコネクションを取得する際に使用するプールを特定するためのキャッシュなのでここでは見ない。</p>
+
+<p>データベースにはこの段階では接続せずコネクションプールを初期するだけで、
+コネクションが必要になった段階で接続するように遅延処理されている。</p>
+
+<h2 id="connection">#connection</h2>
+
+<p>実際にデータベースに接続されるのはconnectionを読んだタイミング。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/connection_handling.rb</span>
+
+<span class="k">def</span> <span class="nf">connection</span>
+  <span class="n">retrieve_connection</span>
+<span class="k">end</span>
+
+<span class="k">def</span> <span class="nf">retrieve_connection</span>
+  <span class="n">connection_handler</span><span class="p">.</span><span class="nf">retrieve_connection</span><span class="p">(</span><span class="nb">self</span><span class="p">)</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/connection_adapters/abstract/connection_pool.rb</span>
+
+<span class="c1"># ActiveRecord::ConnectionAdapters::ConnectionHandler</span>
+<span class="k">def</span> <span class="nf">retrieve_connection</span><span class="p">(</span><span class="n">klass</span><span class="p">)</span> <span class="c1">#:nodoc:</span>
+  <span class="n">pool</span> <span class="o">=</span> <span class="n">retrieve_connection_pool</span><span class="p">(</span><span class="n">klass</span><span class="p">)</span>
+  <span class="k">raise</span> <span class="no">ConnectionNotEstablished</span><span class="p">,</span> <span class="s2">"No connection pool for </span><span class="si">#{</span><span class="n">klass</span><span class="si">}</span><span class="s2">"</span> <span class="k">unless</span> <span class="n">pool</span>
+  <span class="n">conn</span> <span class="o">=</span> <span class="n">pool</span><span class="p">.</span><span class="nf">connection</span>
+  <span class="k">raise</span> <span class="no">ConnectionNotEstablished</span><span class="p">,</span> <span class="s2">"No connection for </span><span class="si">#{</span><span class="n">klass</span><span class="si">}</span><span class="s2"> in connection pool"</span> <span class="k">unless</span> <span class="n">conn</span>
+  <span class="n">conn</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>それぞれがちょっとした処理になってるので2つに分けて見ていく。</p>
+
+<h4 id="retrieve_connection_poolklass">retrieve_connection_pool(klass)</h4>
+
+<p>klassに対応するpoolを取得する。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">retrieve_connection_pool</span><span class="p">(</span><span class="n">klass</span><span class="p">)</span>
+  <span class="n">class_to_pool</span><span class="p">[</span><span class="n">klass</span><span class="p">.</span><span class="nf">name</span><span class="p">]</span> <span class="o">||=</span> <span class="k">begin</span>
+    <span class="k">until</span> <span class="n">pool</span> <span class="o">=</span> <span class="n">pool_for</span><span class="p">(</span><span class="n">klass</span><span class="p">)</span>
+      <span class="n">klass</span> <span class="o">=</span> <span class="n">klass</span><span class="p">.</span><span class="nf">superclass</span>
+      <span class="k">break</span> <span class="k">unless</span> <span class="n">klass</span> <span class="o">&lt;=</span> <span class="no">Base</span>
+    <span class="k">end</span>
+
+    <span class="n">class_to_pool</span><span class="p">[</span><span class="n">klass</span><span class="p">.</span><span class="nf">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pool</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>class_to_poolの実装は<code class="language-plaintext highlighter-rouge">@class_to_pool[Process.pid]</code>になっていて、代入の結果以下の構造になる。
+(@class_to_poolは実際にはThreadSafe::Cacheのインスタンスだが、Hashのように振る舞う)</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>{ 71941 =&gt; { "ActiveRecord::Base" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt;,
+             "MyModel" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt; } }
+</code></pre></div></div>
+
+<p>先ほどのowner_to_poolと似ているが役割が異なっている。
+owner_to_poolはプールを所持している(establish_connectionを実行した)クラスを管理している。
+class_to_poolはクラスが使用するプールを管理している。プールを所持していない場合、
+親クラスが所持するプールを使用するので分けて管理している。</p>
+
+<p>実装は、class_to_pool[klass.name]が存在しない場合にpool_for(klass)でクラスが所持するプールの取得を試みる。
+プールを所持していなければActiveRecord::Baseまで親クラスをたどり続ける。継承関係にあるクラスが明示的にestablish_connectionを呼ばない限り、
+親クラスのコネクションを共有するのはこの処理のおかげである。</p>
+
+<p>ちなみにclass_to_poolはキャッシュなので、新規にestablish_connectionが呼ばれた際にはclearされる。
+establish_connectionが呼ばれた瞬間から、既にキャッシュされているクラスが違うプールを使用する可能性があるから。</p>
+
+<p>pool_forの実装は以下になっている。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">pool_for</span><span class="p">(</span><span class="n">owner</span><span class="p">)</span>
+  <span class="n">owner_to_pool</span><span class="p">.</span><span class="nf">fetch</span><span class="p">(</span><span class="n">owner</span><span class="p">.</span><span class="nf">name</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="n">ancestor_pool</span> <span class="o">=</span> <span class="n">pool_from_any_process_for</span><span class="p">(</span><span class="n">owner</span><span class="p">)</span>
+      <span class="c1"># A connection was established in an ancestor process that must have</span>
+      <span class="c1"># subsequently forked. We can't reuse the connection, but we can copy</span>
+      <span class="c1"># the specification and establish a new connection with it.</span>
+      <span class="n">establish_connection</span> <span class="n">owner</span><span class="p">,</span> <span class="n">ancestor_pool</span><span class="p">.</span><span class="nf">spec</span>
+    <span class="k">else</span>
+      <span class="n">owner_to_pool</span><span class="p">[</span><span class="n">owner</span><span class="p">.</span><span class="nf">name</span><span class="p">]</span> <span class="o">=</span> <span class="kp">nil</span>
+    <span class="k">end</span>
+  <span class="p">}</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>owner_to_poolのkeyが存在するのは下記の2パターン。</p>
+
+<ul>
+  <li>明示的にestablish_connectionを呼ばれた</li>
+  <li>既に一度引数としてownerが渡されている</li>
+</ul>
+
+<p>pool_from_any_process_for(owner)は@owner_to_pool全体からowner.nameに対応するプールを探す。
+プールが存在する場合、別プロセス(親プロセス)でプールを生成していたということになる。
+つまりコメントの通りで、forkされてたら(子プロセスなら)親のプールのspecを元に再接続している。</p>
+
+<p>そして得られたプールを<code class="language-plaintext highlighter-rouge">class_to_pool[klass.name] = pool</code>でキャッシュにセットしている。
+プールがない場合にnilをセットしているのは2回目以降この処理を行わないため。</p>
+
+<h4 id="poolconnection">pool.connection</h4>
+
+<p>@reserved_connections[current_connection_id]に取得済みのコネクションがなければcheckoutしている。
+checkoutはpoolからコネクションを(余っていれば)取得する処理。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">connection</span>
+  <span class="c1"># this is correctly done double-checked locking</span>
+  <span class="c1"># (ThreadSafe::Cache's lookups have volatile semantics)</span>
+  <span class="vi">@reserved_connections</span><span class="p">[</span><span class="n">current_connection_id</span><span class="p">]</span> <span class="o">||</span> <span class="n">synchronize</span> <span class="k">do</span>
+    <span class="vi">@reserved_connections</span><span class="p">[</span><span class="n">current_connection_id</span><span class="p">]</span> <span class="o">||=</span> <span class="n">checkout</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>@reserved_connectionsもThreadSafe::Cacheのインスタンスだ。チェックアウトされたコネクションはスレッドごとに保持されているため、その他のスレッドからは使用されないという仕組みだ。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">checkout</span>
+  <span class="n">synchronize</span> <span class="k">do</span>
+    <span class="n">conn</span> <span class="o">=</span> <span class="n">acquire_connection</span>
+    <span class="n">conn</span><span class="p">.</span><span class="nf">lease</span>
+    <span class="n">checkout_and_verify</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>checkoutの処理は、3段階に別れる。</p>
+
+<ul>
+  <li>acquire_connection</li>
+</ul>
+
+<p>コネクション取得処理。中身の処理の内容は</p>
+
+<ol>
+  <li>利用可能なコネクションのキューからをコネクションを取得</li>
+  <li>(1で取得出来なかった場合) プール上限に達していなければ新規コネクション作成</li>
+  <li>(2でプール上限に達してた場合) timeout付きで再度キューから取得できるのを待つ。だめなら例外</li>
+</ol>
+
+<p>となる。</p>
+
+<ul>
+  <li>conn.lease</li>
+</ul>
+
+<p>自身のスレッドをコネクションのownerにする。
+acquire_connectionの3.でコネクションが足りていない場合、すでに終了しているスレッドが確保しているコネクションを回収する処理があってその時のためにセットされている。</p>
+
+<ul>
+  <li>checkout_and_verify(conn)</li>
+</ul>
+
+<p>コネクションがactiveかどうかを判定し、activeではない場合には再接続を試みる。
+activeかどうかの実装はadapter毎に定義されている(mysql2はpingを投げてる)。
+再接続だめそうならプールからコネクションを削除して例外を投げる。</p>
+
+<p>それぞれの実装詳細は面倒くさいので、ここから先は自分の目で確かめよう！</p>
+
+<p>つまり、あるプロセスが最低限１つ持っているプールをそれぞれのスレッドで取り合っている仕組みになっている。
+そのため、unicorn等のプロセスモデルのサーバーなら余り関係のない話だしpumaのようなスレッドモデルのサーバーならプールの調整が大切なのである。</p>
+
+<p>これらの仕組みを元に、既存のライブラリがどのようにしてShardingを実現しているかはまた次回。</p>
+
+  </div>
+</article>
+
+  </body>
+</html>

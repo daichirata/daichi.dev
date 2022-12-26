@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title>ElasticsearchとGCPのTCP Keepaliveではまった話</title>
+    <link rel="shortcut icon" href="/assets/images/favicon.ico">
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<meta name="generator" content="Jekyll v4.3.1" />
+<meta property="og:title" content="ElasticsearchとGCPのTCP Keepaliveではまった話" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="description" content="今回はGCP上にElasticsearchクラスタを組もうとしてはまった話をします。ちゃんとドキュメント読めと言われればそこまでなんだけど、ミドルウェアが間に入ってて気づくのに遅れてしまった…。" />
+<meta property="og:description" content="今回はGCP上にElasticsearchクラスタを組もうとしてはまった話をします。ちゃんとドキュメント読めと言われればそこまでなんだけど、ミドルウェアが間に入ってて気づくのに遅れてしまった…。" />
+<link rel="canonical" href="https://daichi.dev/posts/2016-05-02-gcp-elasticsearch-tcp-keepalive" />
+<meta property="og:url" content="https://daichi.dev/posts/2016-05-02-gcp-elasticsearch-tcp-keepalive" />
+<meta property="og:site_name" content="daichi.dev" />
+<meta property="og:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2016-05-02T00:00:00+09:00" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta property="twitter:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="twitter:title" content="ElasticsearchとGCPのTCP Keepaliveではまった話" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2016-05-02T00:00:00+09:00","datePublished":"2016-05-02T00:00:00+09:00","description":"今回はGCP上にElasticsearchクラスタを組もうとしてはまった話をします。ちゃんとドキュメント読めと言われればそこまでなんだけど、ミドルウェアが間に入ってて気づくのに遅れてしまった…。","headline":"ElasticsearchとGCPのTCP Keepaliveではまった話","image":"https://daichi.dev/assets/images/og.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://daichi.dev/posts/2016-05-02-gcp-elasticsearch-tcp-keepalive"},"url":"https://daichi.dev/posts/2016-05-02-gcp-elasticsearch-tcp-keepalive"}</script>
+<!-- End Jekyll SEO tag -->
+
+  </head>
+  <body>
+    <header class="mx-4 lg:m-auto lg:w-2/3 py-6 flex items-center justify-between">
+      <h1><a href="/" class="text-2xl font-extrabold gradation-text">daichi.dev</a></h1>
+      <nav class="flex item-center">
+        <a class="pr-4" href="https://twitter.com/daichirata" target="_blank" rel="noopener noreferrer" title="Twitter"><svg height="25" width="25" viewBox="0 0 512 512"><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z" fill="#454C51"></path></svg></a>
+        <a href="https://github.com/daichirata" target="_blank" rel="noopener noreferrer" title="GitHub"><svg height="25" width="25" viewBox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" fill="#454C51"></path></svg></a>
+      </nav>
+    </header>
+    <article class="mx-4 lg:m-auto lg:w-2/3 prose max-w-none">
+  <header class="py-8">
+    <h1 class="mb-2 text-5xl lg:text-5xl tracking-tight text-black font-extrabold">ElasticsearchとGCPのTCP Keepaliveではまった話</h1>
+    <time class="tracking-tight text-gray-600 font-semibold" datetime="2016-05-02">2016-05-02</time>
+    <span class="mx-4 px-4 py-2 border-l-2 border-gray-300 text-gray-500 font-normal">
+      <a href="https://twitter.com/daichirata" class="no-underline">@daichirata</a>
+    </span>
+  </header>
+
+  <div class="text-xl subpixel-antialiased leading-relaxed break-words content">
+    <p>今回はGCP上にElasticsearchクラスタを組もうとしてはまった話をします。ちゃんとドキュメント読めと言われればそこまでなんだけど、ミドルウェアが間に入ってて気づくのに遅れてしまった…。</p>
+
+<h2 id="tldr">TL;DR</h2>
+
+<p>GCEのファイヤーウォールはinactiveコネクションを10分で切断するので、Elasticsearchのクラスタを構築する場合はnet.ipv4.tcp_keepalive_timeの設定を変える必要があるよ。</p>
+
+<h2 id="安定しないクラスタ">安定しないクラスタ</h2>
+
+<p>事の発端はGCEインスタンスで構築していたElasticsearchのクラスタが、一定間隔でノード間の疎通に失敗して切断・再接続を繰り返していました。</p>
+
+<ul>
+  <li>OS: CentOS 7.2</li>
+  <li>Elasticsearch: 2.3.1</li>
+</ul>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[INFO ][discovery.gce              ] [elasticsearch-1] master_left [{elasticsearch-2}{4TPArCtHQMKgWaLod3ZMjA}{10.2.101.5}{10.2.101.5:9300}], reason [failed to ping, tried [3] times, each with  maximum [30s] timeout]
+[WARN ][discovery.gce              ] [elasticsearch-1] master left (reason = failed to ping, tried [3] times, each with  maximum [30s] timeout), current nodes: {{elasticsearch-3}{JtcxuuucRXiClrl6q7qL8A}{10.2.101.5}{10.2.101.5:9300},{elasticsearch-1}{RQvtZKAJTfGmbmWETYY0fw}{10.2.101.4}{elasticsearch-1.c.cyberagent-013.internal/10.2.101.4:9300},}
+[INFO ][cluster.service            ] [elasticsearch-1] removed {{elasticsearch-2}{4TPArCtHQMKgWaLod3ZMjA}{10.2.101.5}{10.2.101.5:9300},}, reason: zen-disco-master_failed ({elasticsearch-2}{4TPArCtHQMKgWaLod3ZMjA}{10.2.101.5}{10.2.101.5:9300})
+[DEBUG][action.admin.cluster.health] [elasticsearch-1] connection exception while trying to forward request with action name [cluster:monitor/health] to master node [{elasticsearch-2}{4TPArCtHQMKgWaLod3ZMjA}{10.2.101.5}{10.2.101.5:9300}], scheduling a retry. Error: [org.elasticsearch.transport.NodeDisconnectedException: [elasticsearch-2][10.2.101.5:9300][cluster:monitor/health] disconnected]
+</code></pre></div></div>
+
+<p>最初はエラーメッセージから、負荷やGCなどでノード間のpingがtime outしているのかと思いその辺の設定を変えて様子を見てみました。</p>
+
+<p><a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-discovery-zen.html">Zen Discovery</a></p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">discovery.zen.fd.ping_timeout</span><span class="pi">:</span> <span class="s">60s</span>
+<span class="na">discovery.zen.fd.ping_retries</span><span class="pi">:</span> <span class="m">6</span>
+</code></pre></div></div>
+
+<p>これで解決すればよかったんですが、設定を変えてみても状況は一向に変わらず、GCなども発生している様子がなかったので本格的に調査します。</p>
+
+<p>Elasticsearchのクラスタ内部のノード間通信には<a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-transport.html">Transport module</a>が使用されていて、Nettyを使って非同期に通信しています。まず初めに、このTransport周りのログをTRACEレベルまで出力するように変更します。</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-XPUT</span> localhost:9200/_cluster/settings <span class="nt">-d</span> <span class="s1">'
+{
+  "transient" : {
+    "logger.transport" : "TRACE",
+    "logger.org.elasticsearch.transport" : "TRACE"
+  }
+}'</span>
+</code></pre></div></div>
+
+<p>その上でログを見てみると、どうもネットワークレイヤでそもそも接続できていない様なログが出力されていました。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[2016-04-27 16:07:43,207][TRACE][transport.netty          ] [elasticsearch-1] close connection exception caught on transport layer [[id: 0xa2b52d5c, /10.2.101.4:40290 =&gt; /10.2.101.5:9300]], disconnecting from relevant node
+java.io.IOException: Connection timed out
+        at sun.nio.ch.FileDispatcherImpl.read0(Native Method)
+        at sun.nio.ch.SocketDispatcher.read(SocketDispatcher.java:39)
+        at sun.nio.ch.IOUtil.readIntoNativeBuffer(IOUtil.java:223)
+        at sun.nio.ch.IOUtil.read(IOUtil.java:192)
+        at sun.nio.ch.SocketChannelImpl.read(SocketChannelImpl.java:380)
+        at org.jboss.netty.channel.socket.nio.NioWorker.read(NioWorker.java:64)
+        at org.jboss.netty.channel.socket.nio.AbstractNioWorker.process(AbstractNioWorker.java:108)
+        at org.jboss.netty.channel.socket.nio.AbstractNioSelector.run(AbstractNioSelector.java:337)
+        at org.jboss.netty.channel.socket.nio.AbstractNioWorker.run(AbstractNioWorker.java:89)
+        at org.jboss.netty.channel.socket.nio.NioWorker.run(NioWorker.java:178)
+        at org.jboss.netty.util.ThreadRenamingRunnable.run(ThreadRenamingRunnable.java:108)
+        at org.jboss.netty.util.internal.DeadLockProofWorker$1.run(DeadLockProofWorker.java:42)
+        at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)
+        at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)
+        at java.lang.Thread.run(Thread.java:745)
+</code></pre></div></div>
+
+<p>後、先程は気づいてなかったんですがtransportで切断されているログも出力されていました。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[INFO][discovery.gce  ] [elasticsearch-1] master_left [{elasticsearch-2}{Xa2Cq98mQie1WcaXFfHraQ}{10.2.101.5}{10.2.101.5:9300}], reason [transport disconnected]
+[WARN][discovery.gce  ] [elasticsearch-1] master left (reason = transport disconnected), current nodes: {{elasticsearch-1}{fjLqVUoxRB6RRNCecJSAaw}{10.2.101.4}{10.2.101.4:9300},}
+[INFO][cluster.service] [elasticsearch-1] removed {{elasticsearch-2}{Xa2Cq98mQie1WcaXFfHraQ}{10.2.101.5}{10.2.101.5:9300},}, reason: zen-disco-master_failed ({elasticsearch-2}{Xa2Cq98mQie1WcaXFfHraQ}{10.2.101.16}{10.2.101.16:9300})
+</code></pre></div></div>
+
+<p>対象のノード間でpingコマンドを実行したまま様子を見てみたんですが、特にネットワークが切れてるようでは無かったのでノード間のtcp接続を確認してみます。</p>
+
+<ul>
+  <li>ノード 1</li>
+</ul>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>netstat <span class="nt">--tcp</span> <span class="nt">-t</span> <span class="nt">-o</span> <span class="nt">-n</span> | <span class="nb">grep </span>9300 | <span class="nb">sort</span> <span class="nt">-k5</span>
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37638        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37637        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37636        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37635        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37634        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37633        ESTABLISHED keepalive <span class="o">(</span>5221.58/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37632        ESTABLISHED keepalive <span class="o">(</span>5172.43/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37631        ESTABLISHED keepalive <span class="o">(</span>5172.43/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37630        ESTABLISHED keepalive <span class="o">(</span>5188.81/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37629        ESTABLISHED keepalive <span class="o">(</span>5188.82/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37628        ESTABLISHED keepalive <span class="o">(</span>5221.58/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37627        ESTABLISHED keepalive <span class="o">(</span>4205.77/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37626        ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42254        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42253        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42252        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42251        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42250        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42249        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42248        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42247        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42246        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42245        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42244        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42243        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42242        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+</code></pre></div></div>
+
+<ul>
+  <li>ノード 2</li>
+</ul>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>netstat <span class="nt">--tcp</span> <span class="nt">-t</span> <span class="nt">-o</span> <span class="nt">-n</span> | <span class="nb">grep </span>9300 | <span class="nb">sort</span> <span class="nt">-k5</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42254        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42253        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42252        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42251        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42250        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42249        ESTABLISHED keepalive <span class="o">(</span>5221.58/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42248        ESTABLISHED keepalive <span class="o">(</span>5172.43/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42247        ESTABLISHED keepalive <span class="o">(</span>5172.43/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42246        ESTABLISHED keepalive <span class="o">(</span>5188.81/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42245        ESTABLISHED keepalive <span class="o">(</span>5188.82/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42244        ESTABLISHED keepalive <span class="o">(</span>5221.58/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42243        ESTABLISHED keepalive <span class="o">(</span>4205.77/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42242        ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37638        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37637        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37636        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37635        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37634        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37633        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37632        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37631        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37630        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37629        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37628        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37627        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37626        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+</code></pre></div></div>
+
+<p>これを見てみると、Elasticsearchはノード間で互いに13本のコネクションを作成していることがわかります。このままwatchコマンドで定期的に監視していると、どうやら一部のコネクションでTCP Keepaliveのprobe packetのやり取りに失敗していて、それが原因でノード間のコネクションがクローズされている事がわかりました。</p>
+
+<p>そもそもTCP Keepaliveのprobe packetは無通信だった場合にのみ送信されるはずだし、一部のコネクションのみやり取りに失敗している原因が良くわかりません。とりあえずカーネルのデフォルト設定だとprobe packetを送り始めるのが2時間後で確認が非常に辛いので、カーネルパラメータを変更して間隔を短くしてみます。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>sysctl <span class="nt">-w</span> <span class="se">\</span>
+net.ipv4.tcp_keepalive_time<span class="o">=</span>100 <span class="se">\</span>
+net.ipv4.tcp_keepalive_intvl<span class="o">=</span>60 <span class="se">\</span>
+net.ipv4.tcp_keepalive_probes<span class="o">=</span>3
+</code></pre></div></div>
+
+<p>その状態で様子を見てみると、なんと今度は問題が発生せずElasticsearchのクラスタも安定して動作するようになりました。GCEのネットワーク仕様的に切断されていそうな挙動だったので調べて見ると、しっかりドキュメントに書かれてました。がーん。</p>
+
+<h2 id="networks-and-firewalls">Networks and Firewalls</h2>
+
+<p><a href="https://cloud.google.com/compute/docs/networking#networks">Using Networks and Firewalls - Compute Engine — Google Cloud Platform</a><br />
+<a href="https://cloud.google.com/compute/docs/troubleshooting">Tips, Troubleshooting, &amp; Known Issues - Compute Engine — Google Cloud Platform</a></p>
+
+<p>GCEのネットワークはインスタンス間の通信であっても、L2ではなく必ずゲートウェイを経由するL3で通信します。そして各インスタンスに対して許可するINBOUNDトラフィックをファイヤーウォールで管理、設定していて、このファイヤーウォールがinactiveなTCPコネクションを10分で切断します。なので、コネクションを維持したい場合は下記設定が推奨されています。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo /sbin/sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=60 net.ipv4.tcp_keepalive_probes=5
+</code></pre></div></div>
+
+<p>ソース読んでないので適当ですが、多分Elasticsearchはノード間で13本コネクションを作成した後コネクションをプールしていて、使われないコネクションが幾つか存在するのかもしれません。そのコネクションがファイアーウォールに切断され、TCP Keepaliveで検知されるタイミングでノード間の接続が切れたとElasticsearchが検知して、クラスタから切断されるっていうのが今回の内容でした。</p>
+
+<h2 id="おわり">おわり</h2>
+
+<p>最初はElasticsearch側の問題だと思っていろいろ設定をみたり、GithubのIssueとかを漁っていて結構気づくのに時間がかかってしまいました。最近はGCPでシステムを構成することも大分多くなってきたと思いますが、他のシステムでも似たような事がおきる可能性は十分にあると思うので、頭の片隅にとどめておいたほうが良さそうです。</p>
+
+
+  </div>
+</article>
+
+  </body>
+</html>

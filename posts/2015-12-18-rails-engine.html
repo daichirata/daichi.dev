@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title>Rails Engineを使ってAPIと管理画面を分離する</title>
+    <link rel="shortcut icon" href="/assets/images/favicon.ico">
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<meta name="generator" content="Jekyll v4.3.1" />
+<meta property="og:title" content="Rails Engineを使ってAPIと管理画面を分離する" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="description" content="この記事は Ruby on Rails Advent Calendar 2015 15日目の記事です。" />
+<meta property="og:description" content="この記事は Ruby on Rails Advent Calendar 2015 15日目の記事です。" />
+<link rel="canonical" href="https://daichi.dev/posts/2015-12-18-rails-engine" />
+<meta property="og:url" content="https://daichi.dev/posts/2015-12-18-rails-engine" />
+<meta property="og:site_name" content="daichi.dev" />
+<meta property="og:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2015-12-18T00:00:00+09:00" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta property="twitter:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="twitter:title" content="Rails Engineを使ってAPIと管理画面を分離する" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2015-12-18T00:00:00+09:00","datePublished":"2015-12-18T00:00:00+09:00","description":"この記事は Ruby on Rails Advent Calendar 2015 15日目の記事です。","headline":"Rails Engineを使ってAPIと管理画面を分離する","image":"https://daichi.dev/assets/images/og.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://daichi.dev/posts/2015-12-18-rails-engine"},"url":"https://daichi.dev/posts/2015-12-18-rails-engine"}</script>
+<!-- End Jekyll SEO tag -->
+
+  </head>
+  <body>
+    <header class="mx-4 lg:m-auto lg:w-2/3 py-6 flex items-center justify-between">
+      <h1><a href="/" class="text-2xl font-extrabold gradation-text">daichi.dev</a></h1>
+      <nav class="flex item-center">
+        <a class="pr-4" href="https://twitter.com/daichirata" target="_blank" rel="noopener noreferrer" title="Twitter"><svg height="25" width="25" viewBox="0 0 512 512"><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z" fill="#454C51"></path></svg></a>
+        <a href="https://github.com/daichirata" target="_blank" rel="noopener noreferrer" title="GitHub"><svg height="25" width="25" viewBox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" fill="#454C51"></path></svg></a>
+      </nav>
+    </header>
+    <article class="mx-4 lg:m-auto lg:w-2/3 prose max-w-none">
+  <header class="py-8">
+    <h1 class="mb-2 text-5xl lg:text-5xl tracking-tight text-black font-extrabold">Rails Engineを使ってAPIと管理画面を分離する</h1>
+    <time class="tracking-tight text-gray-600 font-semibold" datetime="2015-12-18">2015-12-18</time>
+    <span class="mx-4 px-4 py-2 border-l-2 border-gray-300 text-gray-500 font-normal">
+      <a href="https://twitter.com/daichirata" class="no-underline">@daichirata</a>
+    </span>
+  </header>
+
+  <div class="text-xl subpixel-antialiased leading-relaxed break-words content">
+    <p>この記事は <a href="http://qiita.com/advent-calendar/2015/rails">Ruby on Rails Advent Calendar 2015</a> 15日目の記事です。</p>
+
+<p>これまで携わってきたソーシャルゲームのサーバーサイド開発では、1タイトルに対して主に3つの機能を作成することが多かった。</p>
+
+<ul>
+  <li>API
+    <ul>
+      <li>スマートフォンのネイティブアプリケーションから呼ばれるJSON(あるいはJSONフォーマット互換)API</li>
+    </ul>
+  </li>
+  <li>管理用画面
+    <ul>
+      <li>ユーザー情報管理、その他各種制御処理を行う(BANとか補填とかマスタデータキャッシュ管理とか)。エンジニアとカスタマーサポートチームが使用する</li>
+    </ul>
+  </li>
+  <li>デバッグ用画面
+    <ul>
+      <li>開発用のWebUI、単純なAPIを呼ぶフォームではなく「カードのレベルをMAXにするボタン」みたいなものが機能ごとに沢山ある</li>
+    </ul>
+  </li>
+</ul>
+
+<p>開発を行う場合、大体はAPI用の機能がメインになる。ただ、デバック用画面に関しては完全に社内開発用なので適当で構わないけど、管理用画面に関してはそれなりの作りこみが必要になる。基本的には普通のWebアプリケーション開発と変わらない。<a href="https://github.com/drapergem/draper">Draper</a>等のデコレーターを導入したりページネーションを導入したりassetsが結構あったりする。モデルもAPIとは別に存在していて、ユーザーのデータを変更することになるので証跡管理用テーブルや、マスタデータの更新管理用テーブルなどがある。それらを、APIサーバーをメインに書かれているRailsアプリケーションに追加して行くことになる。</p>
+
+<p>ページネーションやデコレーター系のgemは全体に影響するので、API用のモデルが何故か<code class="language-plaintext highlighter-rouge">#decorate</code>メソッドを持っていたり、app以下にdacoratorsディレクトリがあったり、assetsをAPIサーバーでは配信しないように設定を変えたりするのを何とかしたいと思っていた。</p>
+
+<p>単純に、別のRailsアプリケーションとして実装すればいいじゃんっていう話もあるんだけど、結局はAPIも管理用画面も同じユーザーのデータを扱う事になるので管理用画面のアプリケーションからはAPIのモデルを扱う必要がある。なのでRails Engineを使用してアプリケーションを分離してみたのが今回の話。</p>
+
+<h2 id="rails-engine">Rails Engine</h2>
+
+<p>Rails Engineの使い方は<a href="http://railsguides.jp/engines.html">RailsGuides(日本語訳)</a>を見ると使い方は大体わかると思う。</p>
+
+<p>これを例えば今回はadminという名前で定義してみる。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>bin/rails plugin new admin <span class="nt">--mountable</span>
+</code></pre></div></div>
+
+<p>で、mount可能なエンジンとして定義する。</p>
+
+<p>後は、GemfileでEngineを読み込んでroutes.rbでmountする。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Gemfile</span>
+
+<span class="n">gem</span> <span class="s1">'admin'</span><span class="p">,</span> <span class="ss">path: </span><span class="s2">"admin"</span>
+</code></pre></div></div>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># config/routes.rb</span>
+
+<span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">routes</span><span class="p">.</span><span class="nf">draw</span> <span class="k">do</span>
+  <span class="n">mount</span> <span class="no">Admin</span><span class="o">::</span><span class="no">Engine</span> <span class="o">=&gt;</span> <span class="s2">"/admin"</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>基本の形はこんな感じ。Engineの中にもbin/railsファイルがあるので、それを使ってファイルをgenerateしながら管理用画面を開発する。デコレーターやassets関連も全部Engine以下に入れる。</p>
+
+<p>そのままでもある程度整理されるので良いんだけど、APIサーバーではそもそもEngineを読み込まない様にする事で完全に分離させる。</p>
+
+<p>先ず、適当に定義したgroup内に移動させる。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Gemfile</span>
+
+<span class="n">group</span> <span class="ss">:admin</span> <span class="k">do</span>
+  <span class="n">gem</span> <span class="s1">'admin'</span><span class="p">,</span> <span class="ss">path: </span><span class="s2">"admin"</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>次に環境変数で指定されていた場合のみ、Engineのgroupをrequireするようにする。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># config/application.rb</span>
+
+<span class="c1"># Require the gems listed in Gemfile, including any gems</span>
+<span class="c1"># you've limited to :test, :development, or :production.</span>
+<span class="c1"># Bundler.require(*Rails.groups)</span>
+
+<span class="n">groups</span> <span class="o">=</span> <span class="no">Rails</span><span class="p">.</span><span class="nf">groups</span>
+<span class="n">groups</span> <span class="o">&lt;&lt;</span> <span class="ss">:admin</span> <span class="k">if</span> <span class="no">ENV</span><span class="p">[</span><span class="s1">'SERVER_TYPE_ADMIN'</span><span class="p">]</span>
+<span class="no">Bundler</span><span class="p">.</span><span class="nf">require</span><span class="p">(</span><span class="o">*</span><span class="n">groups</span><span class="p">)</span>
+</code></pre></div></div>
+<p>後はAdmin::Engineが定義されている場合のみmountを行う。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># config/routes.rb</span>
+
+<span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">routes</span><span class="p">.</span><span class="nf">draw</span> <span class="k">do</span>
+  <span class="k">if</span> <span class="k">defined?</span><span class="p">(</span><span class="no">Admin</span><span class="o">::</span><span class="no">Engine</span><span class="p">)</span>
+    <span class="n">mount</span> <span class="no">Admin</span><span class="o">::</span><span class="no">Engine</span><span class="p">,</span> <span class="ss">at: :admin</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>こうすることで、Engineを読み込まないAPIサーバー側でview用のgemがロードされたり、管理用画面にアクセスされることは無い。assets:precompileなどを行ってもそもそもEngineが読み込まれていないので、デプロイなんかも共通のフローでいけるはず。</p>
+
+<h2 id="database">Database</h2>
+
+<p>Rails Engineのmigrationは普通は親となるアプリケーションのmigrationにコピーすることになる。が、API側のアプリケーションは<a href="https://github.com/tchandy/octopus">tchandy/octopus</a>を使ってshardingしていたのでちょっと厳しい。更に、管理系のDBなのでAPI側のアプリケーションと同一のDBに入れることは基本的には無いだろう。</p>
+
+<p>今回はちょっと無理やり、DBの接続設定やmigrationも含めてEngine内で全て完結させることにする。まず初めに、DB接続用のabstract classを作成する。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">module</span> <span class="nn">Admin</span>
+  <span class="k">class</span> <span class="nc">Base</span> <span class="o">&lt;</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span>
+    <span class="nb">self</span><span class="p">.</span><span class="nf">abstract_class</span> <span class="o">=</span> <span class="kp">true</span>
+
+    <span class="n">databases</span> <span class="o">=</span> <span class="no">YAML</span><span class="p">.</span><span class="nf">load_file</span><span class="p">(</span><span class="no">Engine</span><span class="p">.</span><span class="nf">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'config/database.yml'</span><span class="p">))</span>
+    <span class="n">octopus_establish_connection</span> <span class="n">databases</span><span class="p">[</span><span class="no">Rails</span><span class="p">.</span><span class="nf">env</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nc">self</span><span class="o">.</span><span class="nf">inherited</span><span class="p">(</span><span class="n">child</span><span class="p">)</span>
+      <span class="n">child</span><span class="p">.</span><span class="nf">custom_octopus_connection</span> <span class="o">=</span> <span class="kp">true</span>
+      <span class="k">super</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>Engine内で追加するモデルは全てこのクラスを継承させてあげる事で、Engine内のconfigを元にしたDBに接続するようになる。</p>
+
+<p>migrationファイルも親にコピーさせずにEngine内で実行できるようにEngine内にrake taskを定義する。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># admin/lib/tasks/admin_tasks.rake</span>
+
+<span class="n">namespace</span> <span class="ss">:admin</span> <span class="k">do</span>
+  <span class="n">task</span> <span class="ss">:set_custom_db_config_paths</span> <span class="k">do</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="no">Admin</span><span class="o">::</span><span class="no">Engine</span><span class="p">.</span><span class="nf">root</span>
+
+    <span class="no">ENV</span><span class="p">[</span><span class="s1">'SCHEMA'</span><span class="p">]</span>       <span class="o">=</span> <span class="n">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'db/schema.rb'</span><span class="p">).</span><span class="nf">to_s</span>
+    <span class="no">ENV</span><span class="p">[</span><span class="s1">'DB_STRUCTURE'</span><span class="p">]</span> <span class="o">=</span> <span class="n">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'db/structure.sql'</span><span class="p">).</span><span class="nf">to_s</span>
+
+    <span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">paths</span><span class="p">[</span><span class="s1">'db/migrate'</span><span class="p">]</span>      <span class="o">=</span> <span class="p">[</span><span class="n">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'db/migrate'</span><span class="p">).</span><span class="nf">to_s</span><span class="p">]</span>
+    <span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">paths</span><span class="p">[</span><span class="s1">'db/seeds'</span><span class="p">]</span>        <span class="o">=</span> <span class="p">[</span><span class="n">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'db/seeds'</span><span class="p">).</span><span class="nf">to_s</span><span class="p">]</span>
+    <span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">paths</span><span class="p">[</span><span class="s1">'config/database'</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'config/database.yml'</span><span class="p">).</span><span class="nf">to_s</span><span class="p">]</span>
+
+    <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Migrator</span><span class="p">.</span><span class="nf">migrations_paths</span> <span class="o">=</span> <span class="n">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'db/migrate'</span><span class="p">).</span><span class="nf">to_s</span>
+  <span class="k">end</span>
+
+  <span class="n">admin_task</span> <span class="o">=</span> <span class="o">-&gt;</span><span class="p">(</span><span class="nb">name</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">task</span> <span class="nb">name</span> <span class="o">=&gt;</span> <span class="ss">:set_custom_db_config_paths</span> <span class="k">do</span>
+      <span class="no">Rake</span><span class="o">::</span><span class="no">Task</span><span class="p">[</span><span class="nb">name</span><span class="p">].</span><span class="nf">invoke</span>
+    <span class="k">end</span>
+  <span class="p">}</span>
+
+  <span class="sx">%w(db:drop db:create db:migrate db:rollback db:seed db:version
+     db:schema:dump db:schema:load db:structure:dump db:structure:load)</span><span class="p">.</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">t</span><span class="o">|</span>
+    <span class="n">admin_task</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">set_custom_db_config_paths</code>で、migrationの情報を書き換える。そうすることでmigrationを親アプリにコピーすること無く実行することが出来る。実行したい場合にはEngineを読み込む必要があるので</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ SERVER_TYPE_ADMIN</span><span class="o">=</span>1 bin/rake admin:db:create
+</code></pre></div></div>
+
+<p>的な感じで実行するか、開発のローカル環境なら<a href="https://github.com/bkeepers/dotenv">dotenv</a>などを使って常に読みこむようにしておいても良いかもしれない。</p>
+
+<h2 id="tips">Tips</h2>
+
+<p>Rails Engine側で使用するgemは<code class="language-plaintext highlighter-rouge">&lt;engine_path&gt;/&lt;name&gt;.gemspec</code>に追加する。その場合Bundlerを経由しているわけではないので自動的にrequireされることは無い。なのでgemを追加した場合には<code class="language-plaintext highlighter-rouge">&lt;engine_path&gt;/lib/&lt;name&gt;/engine.rb</code>でrequireしてあげる必要がある。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># admin/admin.gemspec</span>
+
+<span class="no">Gem</span><span class="o">::</span><span class="no">Specification</span><span class="p">.</span><span class="nf">new</span> <span class="k">do</span> <span class="o">|</span><span class="n">s</span><span class="o">|</span>
+  <span class="n">s</span><span class="p">.</span><span class="nf">add_dependency</span> <span class="s2">"draper"</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># admin/lib/admin/engine.rb</span>
+
+<span class="nb">require</span> <span class="s2">"draper"</span>
+
+<span class="k">module</span> <span class="nn">Admin</span>
+  <span class="k">class</span> <span class="nc">Engine</span> <span class="o">&lt;</span> <span class="o">::</span><span class="no">Rails</span><span class="o">::</span><span class="no">Engine</span>
+    <span class="n">isolate_namespace</span> <span class="no">Admin</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>assets系のgemとかを追加した場合には読み込まれずに悩むことになるので気をつけたほうが良い。別に従わずに上で定義したGemfileのgroup内に追加してもいいし、その場合はこれは不要だけど。</p>
+
+<p>後、コントローラーの追加などはちゃんとEngine内のbin/railsでgenerateしたほうが良い。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">require_dependency</span> <span class="s2">"admin/application_controller"</span>
+
+<span class="k">module</span> <span class="nn">Admin</span>
+  <span class="k">class</span> <span class="nc">UsersController</span> <span class="o">&lt;</span> <span class="no">ApplicationController</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>あるいは、<code class="language-plaintext highlighter-rouge">require_dependency</code>をちゃんとつけたほうがいい。何故なのかと言うと、Railsではローカルなどの開発環境ではファイルの変更があった場合にクラスが再ロードされる。その時先に親アプリのApplicationControllerが評価されるpathを通った場合、以降Engine側のApplicationControllerの評価が親アプリのクラスとして実行されてしまうから。</p>
+
+<p>autoloadの問題なので、この様に定義する形でも回避できる。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">class</span> <span class="nc">Admin::UsersController</span> <span class="o">&lt;</span> <span class="no">Admin</span><span class="o">::</span><span class="no">ApplicationController</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>詳細はRailsGuidesの<a href="http://railsguides.jp/constant_autoloading_and_reloading.html">このへん</a>が詳しい。</p>
+
+<p>親アプリの何かをEngine側から拡張したい場合には<code class="language-plaintext highlighter-rouge">to_prepare</code>で追加する。これも上と同様で、そうしないとクラスの再ロード時に問題がでる。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">module</span> <span class="nn">Admin</span>
+  <span class="k">class</span> <span class="nc">Engine</span> <span class="o">&lt;</span> <span class="o">::</span><span class="no">Rails</span><span class="o">::</span><span class="no">Engine</span>
+    <span class="n">isolate_namespace</span> <span class="no">Admin</span>
+
+    <span class="n">config</span><span class="p">.</span><span class="nf">to_prepare</span> <span class="k">do</span>
+      <span class="o">::</span><span class="no">ApplicationController</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="ss">:include</span><span class="p">,</span> <span class="no">SuperGrateModule</span><span class="p">)</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>ユースケースとしては、refererを見てデバック用画面のフォームからAPIへのリクエストだった場合だけユーザー情報をsessionに格納したり、エラーログにメッセージを追加したりするmoduleをEngine側からincludeさせたりしている。結局は普通の同一プロセスにロードされるRubyプログラムなので、まあなんとでもなると思う。</p>
+
+<h2 id="おわり">おわり</h2>
+
+<p>APIサーバーと付随するWebUIをEngineで分離すると、それぞれが開発のサイクルやデプロイのタイミングなんかも異なったりするので安心感があって良い。migration周りは若干バットノウハウ気味だけど用件的にしょうがない部分あるのでまあいいんじゃないかな。</p>
+
+
+  </div>
+</article>
+
+  </body>
+</html>

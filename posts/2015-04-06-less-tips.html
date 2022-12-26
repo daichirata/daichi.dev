@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title>Lessの便利な使い方</title>
+    <link rel="shortcut icon" href="/assets/images/favicon.ico">
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<meta name="generator" content="Jekyll v4.3.1" />
+<meta property="og:title" content="Lessの便利な使い方" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="description" content="最近 Stop using tail -f (mostly) や 「tail -f」を使うのは情弱、情強は「less +F」を使う などless押しな記事が幾つか上がっているんだけど、タイトルが煽り気味なのか若干反感を呼んでいるようなのでless派が職場で肩身の狭い思いをしないようにもう少し便利な使い方を紹介したい。" />
+<meta property="og:description" content="最近 Stop using tail -f (mostly) や 「tail -f」を使うのは情弱、情強は「less +F」を使う などless押しな記事が幾つか上がっているんだけど、タイトルが煽り気味なのか若干反感を呼んでいるようなのでless派が職場で肩身の狭い思いをしないようにもう少し便利な使い方を紹介したい。" />
+<link rel="canonical" href="https://daichi.dev/posts/2015-04-06-less-tips" />
+<meta property="og:url" content="https://daichi.dev/posts/2015-04-06-less-tips" />
+<meta property="og:site_name" content="daichi.dev" />
+<meta property="og:image" content="https://daichi.dev/assets/images/posts/2015-04-06-less-tips/less-1.png" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2015-04-06T00:00:00+09:00" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta property="twitter:image" content="https://daichi.dev/assets/images/posts/2015-04-06-less-tips/less-1.png" />
+<meta property="twitter:title" content="Lessの便利な使い方" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2015-04-06T00:00:00+09:00","datePublished":"2015-04-06T00:00:00+09:00","description":"最近 Stop using tail -f (mostly) や 「tail -f」を使うのは情弱、情強は「less +F」を使う などless押しな記事が幾つか上がっているんだけど、タイトルが煽り気味なのか若干反感を呼んでいるようなのでless派が職場で肩身の狭い思いをしないようにもう少し便利な使い方を紹介したい。","headline":"Lessの便利な使い方","image":"https://daichi.dev/assets/images/posts/2015-04-06-less-tips/less-1.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://daichi.dev/posts/2015-04-06-less-tips"},"url":"https://daichi.dev/posts/2015-04-06-less-tips"}</script>
+<!-- End Jekyll SEO tag -->
+
+  </head>
+  <body>
+    <header class="mx-4 lg:m-auto lg:w-2/3 py-6 flex items-center justify-between">
+      <h1><a href="/" class="text-2xl font-extrabold gradation-text">daichi.dev</a></h1>
+      <nav class="flex item-center">
+        <a class="pr-4" href="https://twitter.com/daichirata" target="_blank" rel="noopener noreferrer" title="Twitter"><svg height="25" width="25" viewBox="0 0 512 512"><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z" fill="#454C51"></path></svg></a>
+        <a href="https://github.com/daichirata" target="_blank" rel="noopener noreferrer" title="GitHub"><svg height="25" width="25" viewBox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" fill="#454C51"></path></svg></a>
+      </nav>
+    </header>
+    <article class="mx-4 lg:m-auto lg:w-2/3 prose max-w-none">
+  <header class="py-8">
+    <h1 class="mb-2 text-5xl lg:text-5xl tracking-tight text-black font-extrabold">Lessの便利な使い方</h1>
+    <time class="tracking-tight text-gray-600 font-semibold" datetime="2015-04-06">2015-04-06</time>
+    <span class="mx-4 px-4 py-2 border-l-2 border-gray-300 text-gray-500 font-normal">
+      <a href="https://twitter.com/daichirata" class="no-underline">@daichirata</a>
+    </span>
+  </header>
+
+  <div class="text-xl subpixel-antialiased leading-relaxed break-words content">
+    <p>最近 <a href="http://www.brianstorti.com/stop-using-tail/">Stop using tail -f (mostly)</a> や <a href="http://www.softantenna.com/wp/unix/stop-using-tail-f/">「tail -f」を使うのは情弱、情強は「less +F」を使う</a> などless押しな記事が幾つか上がっているんだけど、タイトルが煽り気味なのか若干反感を呼んでいるようなのでless派が職場で肩身の狭い思いをしないようにもう少し便利な使い方を紹介したい。</p>
+
+<h2 id="tail--fの様なscroll-forward">tail -fの様なScroll forward</h2>
+
+<p><code class="language-plaintext highlighter-rouge">less +F</code>で起動またはless起動中にF</p>
+
+<p>元記事にもある<code class="language-plaintext highlighter-rouge">tail -f</code>と同様の振る舞い。正直この機能と検索だけでいいのであればtailで十分。lessの便利なところは様々な機能との組み合わせにあって、これから紹介する機能は基本的にこのモードと組み合わせが可能だ。あと、less開いてFのほうがタイプが面倒くさくないのでおすすめ。</p>
+
+<h2 id="1行で表示する-改行しない">1行で表示する (改行しない)</h2>
+
+<p><code class="language-plaintext highlighter-rouge">less -S</code>で起動またはless起動中に-Sr(-Sでモード切り替え、rで画面の再描写)</p>
+
+<p>アクセスログなど一行が長いファイルを見る際に便利。オプションの指定をしない場合には以下の様な表示になる。ログは <a href="https://github.com/tamtam180/apache_log_gen">tamtam180/apache_log_gen</a> で生成した。便利。
+<img src="/assets/images/posts/2015-04-06-less-tips/less-1.png" alt="" />
+オプションを有効にすると、
+<img src="/assets/images/posts/2015-04-06-less-tips/less-2.png" alt="" />
+このように、改行されなくなる。切れている部分はESC-) or →、ESC-( or ←で表示することができる。上で紹介したように一度開いたファイルを後から切り替えることが可能で、less起動中に-Srで改行有り・無しをトグルすることが出来る。</p>
+
+<h2 id="正規表現でマッチする行だけを表示非表示">正規表現でマッチする行だけを表示/非表示</h2>
+
+<p>less起動中に&amp;でマッチした行だけを表示、&amp; ^nでマッチした行だけを非表示</p>
+
+<p>比較的新しいバージョンのlessじゃないと使えないんだけど、lessの表示にgrepをかけるようなイメージ。もちろん絞り込んだ状態でFを押すことで<code class="language-plaintext highlighter-rouge">tail -f | grep</code>と同じ機能になる。</p>
+
+<p>先ほどのログから、<code class="language-plaintext highlighter-rouge">GET /category</code>のみを表示
+<img src="/assets/images/posts/2015-04-06-less-tips/less-3.png" alt="" />
+逆に、<code class="language-plaintext highlighter-rouge">GET /category</code>以外を表示
+<img src="/assets/images/posts/2015-04-06-less-tips/less-4.png" alt="" /></p>
+
+<h2 id="ansiカラーシーケンスを表示する">ANSIカラーシーケンスを表示する</h2>
+
+<p><code class="language-plaintext highlighter-rouge">less -R</code>で起動またはless起動中に-Rr(-Rでモード切り替え、rで画面の再描写)</p>
+
+<p>production環境ではあまり使う機会は無いかもしれないが、Railsの開発環境のapplication.logのようなカラーシーケンスが多用されたファイルを開くときに色を反映させる。
+<img src="/assets/images/posts/2015-04-06-less-tips/less-5.png" alt="" />
+が、
+<img src="/assets/images/posts/2015-04-06-less-tips/less-6.png" alt="" />
+こうなる。</p>
+
+<h2 id="行番号を計算させない">行番号を計算させない</h2>
+
+<p><code class="language-plaintext highlighter-rouge">less -n</code>で起動またはless起動中に-n</p>
+
+<p>これは表示という意味では関係のない部分なんだけど、今表示している画面がファイルの何行目から何行目なのかをデフォルトでは表示していて、その計算が重いので切ることでサイズの大きなファイルを開く・末尾に移動するなどの操作が大幅に高速化される。行表示がいらないなら本当におすすめ。</p>
+
+<h2 id="まとめ">まとめ</h2>
+
+<p>ログファイルは<code class="language-plaintext highlighter-rouge">less -SRn</code>で開きFを押して流れる行を眺めよう。</p>
+
+<p>一番良いのはmanを見ることで、他にも便利機能は沢山あるんだけど普段私が使うのはだいたいこの位だと思う。後は環境によって上記の機能が使えないバージョンであったりlessがそもそも使えないんだよ！とかあると思うんだけどそういう時は<code class="language-plaintext highlighter-rouge">tail -f | grep</code>で問題ないし、わりと手癖というか慣れの部分もあるのでここまで書いておいてなんだけど使いやすい方法が一番いいんだと思う。</p>
+
+  </div>
+</article>
+
+  </body>
+</html>

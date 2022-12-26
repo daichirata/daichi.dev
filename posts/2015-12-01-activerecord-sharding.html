@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title>ActiveRecord Sharding</title>
+    <link rel="shortcut icon" href="/assets/images/favicon.ico">
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<meta name="generator" content="Jekyll v4.3.1" />
+<meta property="og:title" content="ActiveRecord Sharding" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="description" content="前回の続き" />
+<meta property="og:description" content="前回の続き" />
+<link rel="canonical" href="https://daichi.dev/posts/2015-12-01-activerecord-sharding" />
+<meta property="og:url" content="https://daichi.dev/posts/2015-12-01-activerecord-sharding" />
+<meta property="og:site_name" content="daichi.dev" />
+<meta property="og:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2015-12-01T00:00:00+09:00" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta property="twitter:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="twitter:title" content="ActiveRecord Sharding" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2015-12-01T00:00:00+09:00","datePublished":"2015-12-01T00:00:00+09:00","description":"前回の続き","headline":"ActiveRecord Sharding","image":"https://daichi.dev/assets/images/og.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://daichi.dev/posts/2015-12-01-activerecord-sharding"},"url":"https://daichi.dev/posts/2015-12-01-activerecord-sharding"}</script>
+<!-- End Jekyll SEO tag -->
+
+  </head>
+  <body>
+    <header class="mx-4 lg:m-auto lg:w-2/3 py-6 flex items-center justify-between">
+      <h1><a href="/" class="text-2xl font-extrabold gradation-text">daichi.dev</a></h1>
+      <nav class="flex item-center">
+        <a class="pr-4" href="https://twitter.com/daichirata" target="_blank" rel="noopener noreferrer" title="Twitter"><svg height="25" width="25" viewBox="0 0 512 512"><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z" fill="#454C51"></path></svg></a>
+        <a href="https://github.com/daichirata" target="_blank" rel="noopener noreferrer" title="GitHub"><svg height="25" width="25" viewBox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" fill="#454C51"></path></svg></a>
+      </nav>
+    </header>
+    <article class="mx-4 lg:m-auto lg:w-2/3 prose max-w-none">
+  <header class="py-8">
+    <h1 class="mb-2 text-5xl lg:text-5xl tracking-tight text-black font-extrabold">ActiveRecord Sharding</h1>
+    <time class="tracking-tight text-gray-600 font-semibold" datetime="2015-12-01">2015-12-01</time>
+    <span class="mx-4 px-4 py-2 border-l-2 border-gray-300 text-gray-500 font-normal">
+      <a href="https://twitter.com/daichirata" class="no-underline">@daichirata</a>
+    </span>
+  </header>
+
+  <div class="text-xl subpixel-antialiased leading-relaxed break-words content">
+    <p><a href="/2015/11/19/activerecord-connection/">前回</a>の続き</p>
+
+<p>ActiveRecordが実際にDBにクエリを発行する場合<code class="language-plaintext highlighter-rouge">ActiveRecord::Base.connection</code>を経由する。話を単純にする為に、クエリの実行だけに限定してShardingを実現しようと思った場合このメソッドがそれぞれのShardに対して確立されたコネクションを返せば良い。</p>
+
+<p>一番多く採用されている実現方法はconnectionメソッドを上書きしてproxyを経由させるパターンで、多くのGemで採用されている。その他にもコネクションの確立方法・管理などで既存のGemがどうやって実現しているかをいくつか紹介する。</p>
+
+<h2 id="octopus">Octopus</h2>
+
+<p>おそらく一番有名なのかもしれないGem。<a href="https://github.com/kovyrin/db-charmer">kovyrin/db-charmer</a>の影響を少なからず受けている。</p>
+
+<p>実際に置き換えているのは、ActiveRecord::BaseにOctopus::Modelをextendした際に実行されるhijack_methodsで行われている。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/octopus/model.rb</span>
+
+<span class="k">def</span> <span class="nf">hijack_methods</span>
+  <span class="c1"># ...</span>
+
+  <span class="k">class</span> <span class="o">&lt;&lt;</span> <span class="nb">self</span>
+    <span class="c1"># ...</span>
+
+    <span class="n">alias_method_chain</span> <span class="ss">:connection</span><span class="p">,</span> <span class="ss">:octopus</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:connection_pool</span><span class="p">,</span> <span class="ss">:octopus</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:clear_all_connections!</span><span class="p">,</span> <span class="ss">:octopus</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:clear_active_connections!</span><span class="p">,</span> <span class="ss">:octopus</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:connected?</span><span class="p">,</span> <span class="ss">:octopus</span>
+
+    <span class="c1"># ...</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">def</span> <span class="nf">connection_with_octopus</span>
+  <span class="k">if</span> <span class="n">should_use_normal_connection?</span>
+    <span class="n">connection_without_octopus</span>
+  <span class="k">else</span>
+    <span class="n">connection_proxy</span><span class="p">.</span><span class="nf">current_model</span> <span class="o">=</span> <span class="nb">self</span>
+    <span class="n">connection_proxy</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">def</span> <span class="nf">connection_proxy</span>
+  <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">class_variable_defined?</span><span class="p">(</span><span class="ss">:@@connection_proxy</span><span class="p">)</span> <span class="o">&amp;&amp;</span>
+    <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">class_variable_get</span><span class="p">(</span><span class="ss">:@@connection_proxy</span><span class="p">)</span> <span class="o">||</span>
+    <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">class_variable_set</span><span class="p">(</span><span class="ss">:@@connection_proxy</span><span class="p">,</span> <span class="no">Octopus</span><span class="o">::</span><span class="no">Proxy</span><span class="p">.</span><span class="nf">new</span><span class="p">)</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>Octopus::Proxyはそこそこにツラみを伴うアレなクラスで、Shard毎のコネクションの切り替え以外にもShardへのコネクション確立(プールの作成)と管理もProxyクラス自身で行っている。つまりActiveRecordのConnectionHandlerのような役割を自前で実装している。初めてconnectionが実行されたタイミングでインスタンスが生成され、initalizeで各Shardへのプールを作成する。</p>
+
+<p>内部ではTLSを使ってShardを管理していて、method_missiongでその時に指定されているShardのコネクションを取得してProxyする。簡単なダミーコードで説明すると</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">Thread</span><span class="p">.</span><span class="nf">current</span><span class="p">[</span><span class="ss">:octopus_shard</span><span class="p">]</span>              <span class="c1"># =&gt; nil</span>
+<span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">connection</span><span class="p">.</span><span class="nf">execute</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>  <span class="c1"># =&gt; default connection.</span>
+
+<span class="no">Octopus</span><span class="p">.</span><span class="nf">using</span><span class="p">(</span><span class="ss">:shard1</span><span class="p">)</span> <span class="k">do</span>
+  <span class="no">Thread</span><span class="p">.</span><span class="nf">current</span><span class="p">[</span><span class="ss">:octopus_shard</span><span class="p">]</span>             <span class="c1"># =&gt; :shard1</span>
+  <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">connection</span><span class="p">.</span><span class="nf">execute</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="c1"># =&gt; :shard1 connection.</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>のような感じ。 Shardへの振り分けはProxyのmethod_missingで</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">method_missing</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">if</span> <span class="n">should_clean_connection_proxy?</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
+    <span class="n">conn</span> <span class="o">=</span> <span class="n">select_connection</span>
+    <span class="nb">self</span><span class="p">.</span><span class="nf">last_current_shard</span> <span class="o">=</span> <span class="n">current_shard</span>
+    <span class="n">clean_connection_proxy</span>
+    <span class="n">conn</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">elsif</span> <span class="n">should_send_queries_to_shard_slave_group?</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
+    <span class="n">send_queries_to_shard_slave_group</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">elsif</span> <span class="n">should_send_queries_to_slave_group?</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
+    <span class="n">send_queries_to_slave_group</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">elsif</span> <span class="n">should_send_queries_to_replicated_databases?</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
+    <span class="n">send_queries_to_selected_slave</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">else</span>
+    <span class="n">select_connection</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>現在のShardに対するconnectionを取得してそのconnectionに対してsendでdelegateする実装になっている。その他にも実際にはRelation・Associationの対応でもう少し作りこみが必要だが基本的な考え方はこれで問題ない。</p>
+
+<h2 id="switchpoint">SwitchPoint</h2>
+
+<p>ShardingではなくR/W splittingに使われているGem。コネクションを切り替えるという点ではだいたい似ているので紹介しておく。軽量なGemで見通しも良いので何か1つガッツリ読みこんで勉強したいのであればこのGemを選択するの良いかもしれない。</p>
+
+<p>SwitchPoint::ModelをincludeしたModelに対してconnectionを差し替える。その後use_switch_pointを実行することでproxyを有効にする。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/switch_point/model.rb</span>
+
+<span class="k">def</span> <span class="nc">self</span><span class="o">.</span><span class="nf">included</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+  <span class="n">model</span><span class="p">.</span><span class="nf">singleton_class</span><span class="p">.</span><span class="nf">class_eval</span> <span class="k">do</span>
+    <span class="kp">include</span> <span class="no">ClassMethods</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:connection</span><span class="p">,</span> <span class="ss">:switch_point</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:cache</span><span class="p">,</span> <span class="ss">:switch_point</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:uncached</span><span class="p">,</span> <span class="ss">:switch_point</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">module</span> <span class="nn">ClassMethods</span>
+  <span class="k">def</span> <span class="nf">connection_with_switch_point</span>
+    <span class="k">if</span> <span class="n">switch_point_proxy</span>
+      <span class="n">switch_point_proxy</span><span class="p">.</span><span class="nf">connection</span>
+    <span class="k">else</span>
+      <span class="n">connection_without_switch_point</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="nf">switch_point_proxy</span>
+    <span class="k">if</span> <span class="vi">@switch_point_name</span>
+      <span class="no">ProxyRepository</span><span class="p">.</span><span class="nf">checkout</span><span class="p">(</span><span class="vi">@switch_point_name</span><span class="p">)</span>
+    <span class="k">elsif</span> <span class="nb">self</span> <span class="o">==</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span>
+      <span class="kp">nil</span>
+    <span class="k">else</span>
+      <span class="n">superclass</span><span class="p">.</span><span class="nf">switch_point_proxy</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>コネクションはProxyRepository.checkoutのタイミングで未初期化の@switch_point_nameであれば作成される。また、継承関係にも対応していて自身でuse_switch_pointを実行していないクラスは親クラスのproxyをたどることでActiveRecordの様にコネクションを使い回す様になっている。</p>
+
+<p>コネクションの確立方法は、ActiveRecord::Baseを継承するダミークラスを作成してそのクラスを使ってestablish_connectionを実行している。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/switch_point/proxy.rb</span>
+
+<span class="k">def</span> <span class="nf">define_model</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span>
+  <span class="n">model_name</span> <span class="o">=</span> <span class="no">SwitchPoint</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">model_name</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span>
+  <span class="k">if</span> <span class="n">model_name</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="no">Class</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">)</span>
+    <span class="no">Proxy</span><span class="p">.</span><span class="nf">const_set</span><span class="p">(</span><span class="n">model_name</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+    <span class="n">model</span><span class="p">.</span><span class="nf">establish_connection</span><span class="p">(</span><span class="no">SwitchPoint</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">database_name</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="n">mode</span><span class="p">))</span>
+    <span class="n">model</span>
+  <span class="k">elsif</span> <span class="n">mode</span> <span class="o">==</span> <span class="ss">:readonly</span>
+    <span class="c1"># Re-use writable connection</span>
+    <span class="no">Proxy</span><span class="p">.</span><span class="nf">const_get</span><span class="p">(</span><span class="no">SwitchPoint</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">model_name</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="ss">:writable</span><span class="p">))</span>
+  <span class="k">else</span>
+    <span class="no">Class</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>後は必要に応じてクラスを取り出してconnectionを取得する。この方式のいいところはOctopusと違ってestablish_connection経由でのコネクション確立なのでActiveRecordの変更に比較的強い所と、ActiveRecord::BaseのConnectionHandlerに管理を任せられる部分にある(clear_active_connections!等の確保済みコネクションに対する処理の辺り)。</p>
+
+<p>SwitchPointもproxy内部でmodeがTLSで管理されていてreadとwriteのコネクションを切り替える仕組みになっている。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">Article</span><span class="p">.</span><span class="nf">with_readonly</span> <span class="p">{</span> <span class="no">Article</span><span class="p">.</span><span class="nf">first</span> <span class="p">}</span> <span class="c1"># Read from db-blog-slave</span>
+<span class="no">Category</span><span class="p">.</span><span class="nf">with_readonly</span> <span class="p">{</span> <span class="no">Category</span><span class="p">.</span><span class="nf">first</span> <span class="p">}</span> <span class="c1"># Also read from db-blog-slave</span>
+<span class="no">Comment</span><span class="p">.</span><span class="nf">with_readonly</span> <span class="p">{</span> <span class="no">Comment</span><span class="p">.</span><span class="nf">first</span> <span class="p">}</span> <span class="c1"># Read from db-comment-slave</span>
+
+<span class="no">Article</span><span class="p">.</span><span class="nf">with_readonly</span> <span class="k">do</span>
+  <span class="n">article</span> <span class="o">=</span> <span class="no">Article</span><span class="p">.</span><span class="nf">first</span>  <span class="c1"># Read from db-blog-slave</span>
+  <span class="n">article</span><span class="p">.</span><span class="nf">title</span> <span class="o">=</span> <span class="s1">'new title'</span>
+  <span class="no">Article</span><span class="p">.</span><span class="nf">with_writable</span> <span class="k">do</span>
+    <span class="n">article</span><span class="p">.</span><span class="nf">save!</span>  <span class="c1"># Write to db-blog-master</span>
+    <span class="n">article</span><span class="p">.</span><span class="nf">reload</span>  <span class="c1"># Read from db-blog-master</span>
+    <span class="no">Category</span><span class="p">.</span><span class="nf">first</span>  <span class="c1"># Read from db-blog-master</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<h2 id="activerecordturntable">ActiveRecord::Turntable</h2>
+
+<p>ドリコム製のライブラリ。これまでにあったGemとはアプローチが大きく異なりconnectionを上書きしない。更に<code class="language-plaintext highlighter-rouge">Ocotpus.using</code>のようなShardの指定を明示的に行わずにShardingを実現している。また、クラスタでUniqなIDを生成するためのSequencerが付いてきたりする。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/active_record/turntable/base.rb</span>
+
+<span class="k">def</span> <span class="nf">turntable</span><span class="p">(</span><span class="n">cluster_name</span><span class="p">,</span> <span class="n">shard_key_name</span><span class="p">,</span> <span class="n">options</span> <span class="o">=</span> <span class="p">{})</span>
+  <span class="c1"># ...</span>
+
+  <span class="nb">self</span><span class="p">.</span><span class="nf">turntable_cluster</span> <span class="o">=</span>
+    <span class="nb">self</span><span class="p">.</span><span class="nf">turntable_clusters</span><span class="p">[</span><span class="n">cluster_name</span><span class="p">]</span> <span class="o">||=</span> <span class="no">Cluster</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span>
+                                                <span class="n">turntable_config</span><span class="p">[</span><span class="ss">:clusters</span><span class="p">][</span><span class="n">cluster_name</span><span class="p">],</span>
+                                                <span class="n">options</span>
+                                              <span class="p">)</span>
+  <span class="n">turntable_replace_connection_pool</span>
+<span class="k">end</span>
+
+<span class="k">def</span> <span class="nf">turntable_replace_connection_pool</span>
+  <span class="n">ch</span> <span class="o">=</span> <span class="n">connection_handler</span>
+  <span class="n">cp</span> <span class="o">=</span> <span class="no">ConnectionProxy</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="nb">self</span><span class="p">,</span> <span class="n">turntable_cluster</span><span class="p">)</span>
+  <span class="n">pp</span> <span class="o">=</span> <span class="no">PoolProxy</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="n">cp</span><span class="p">)</span>
+  <span class="n">ch</span><span class="p">.</span><span class="nf">class_to_pool</span><span class="p">.</span><span class="nf">clear</span> <span class="k">if</span> <span class="k">defined?</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="nf">class_to_pool</span><span class="p">)</span>
+  <span class="n">ch</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="ss">:class_to_pool</span><span class="p">)[</span><span class="nb">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">ch</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="ss">:owner_to_pool</span><span class="p">)[</span><span class="nb">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pp</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p><a href="/2015/11/19/activerecord-connection/">前回</a>見たConnectionHandlerのowner_to_poolをConnectionProxyで置き換えている。PoolProxyはプール全体のコネクションに実行する必要のあるメソッドをproxyしている。</p>
+
+<p>コネクションの確立方法はSwitchPoint等と同様に、Shard毎にActiveRecord::Baseを継承するダミークラスを作成してestablish_connectionするパターン。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">get_or_set_connection_class</span>
+  <span class="k">if</span> <span class="no">Connections</span><span class="p">.</span><span class="nf">const_defined?</span><span class="p">(</span><span class="nb">name</span><span class="p">.</span><span class="nf">classify</span><span class="p">)</span>
+    <span class="n">klass</span> <span class="o">=</span> <span class="no">Connections</span><span class="p">.</span><span class="nf">const_get</span><span class="p">(</span><span class="nb">name</span><span class="p">.</span><span class="nf">classify</span><span class="p">)</span>
+  <span class="k">else</span>
+    <span class="n">klass</span> <span class="o">=</span> <span class="no">Class</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">)</span>
+    <span class="no">Connections</span><span class="p">.</span><span class="nf">const_set</span><span class="p">(</span><span class="nb">name</span><span class="p">.</span><span class="nf">classify</span><span class="p">,</span> <span class="n">klass</span><span class="p">)</span>
+    <span class="n">klass</span><span class="p">.</span><span class="nf">abstract_class</span> <span class="o">=</span> <span class="kp">true</span>
+  <span class="k">end</span>
+  <span class="n">klass</span>
+<span class="k">end</span>
+
+<span class="k">def</span> <span class="nf">create_connection_class</span>
+  <span class="n">klass</span> <span class="o">=</span> <span class="n">get_or_set_connection_class</span>
+  <span class="n">klass</span><span class="p">.</span><span class="nf">remove_connection</span>
+  <span class="n">klass</span><span class="p">.</span><span class="nf">establish_connection</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">connection_pool</span><span class="p">.</span><span class="nf">spec</span><span class="p">.</span><span class="nf">config</span><span class="p">[</span><span class="ss">:shards</span><span class="p">][</span><span class="nb">name</span><span class="p">].</span><span class="nf">with_indifferent_access</span>
+  <span class="n">klass</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>後は必要に応じてクラスを取り出してconnectionとconnection_poolを取得する。ただ、Turntableの場合は変更が大きすぎて確保済みのコネクションに対する処理などは自前で行う必要があるっぽいけど。</p>
+
+<p>実際にコネクションを切り替える部分は</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/active_record/turntable/connection_proxy.rb</span>
+
+<span class="k">def</span> <span class="nf">method_missing</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="n">clear_query_cache_if_needed</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
+  <span class="k">if</span> <span class="n">shard_fixed?</span>
+    <span class="n">connection</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">elsif</span> <span class="n">mixable?</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+    <span class="n">fader</span> <span class="o">=</span> <span class="vi">@mixer</span><span class="p">.</span><span class="nf">build_fader</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+    <span class="n">logger</span><span class="p">.</span><span class="nf">debug</span> <span class="p">{</span> <span class="s2">"[ActiveRecord::Turntable] Sending method: </span><span class="si">#{</span><span class="nb">method</span><span class="si">}</span><span class="s2">, "</span> <span class="o">+</span>
+      <span class="s2">"sql: </span><span class="si">#{</span><span class="n">args</span><span class="p">.</span><span class="nf">first</span><span class="si">}</span><span class="s2">, "</span> <span class="o">+</span>
+      <span class="s2">"shards: </span><span class="si">#{</span><span class="n">fader</span><span class="p">.</span><span class="nf">shards_query_hash</span><span class="p">.</span><span class="nf">keys</span><span class="p">.</span><span class="nf">map</span><span class="p">(</span><span class="o">&amp;</span><span class="ss">:name</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span> <span class="p">}</span>
+    <span class="n">fader</span><span class="p">.</span><span class="nf">execute</span>
+  <span class="k">else</span>
+    <span class="n">connection</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>となっている。<code class="language-plaintext highlighter-rouge">shard_fixed?</code>はOctopus.usingでShardを指定した時の様に、Shardが指定されていて判定する必要がない場合。通常のクエリなどで判定の必要がある場合には<code class="language-plaintext highlighter-rouge">@mixer.build_fader</code>でクエリから対象のShardを判定している。この中で引数のSQLを<a href="https://github.com/wvanbergen/sql_tree">wvanbergen/sql_tree</a>を使ってSQLをパースして対象Shardを絞り込んでいる。大分マッチョだ。</p>
+
+<h2 id="other">Other</h2>
+
+<p>その他にも、開発が止まってるものやReplication系の物も含めるといくつかライブラリはある。</p>
+
+<ul>
+  <li><a href="https://github.com/taiki45/mixed_gauge">taiki45/mixed_gauge</a></li>
+  <li><a href="https://github.com/zendesk/active_record_shards">zendesk/active_record_shards</a></li>
+  <li><a href="https://github.com/mperham/data_fabric">mperham/data_fabric</a></li>
+  <li><a href="https://github.com/technoweenie/masochism">technoweenie/masochism</a></li>
+  <li><a href="https://github.com/r7kamura/replicat">r7kamura/replicat</a></li>
+  <li><a href="https://github.com/schoefmax/multi_db">schoefmax/multi_db</a></li>
+  <li><a href="https://github.com/mixonic/ShardTheLove">mixonic/ShardTheLove</a></li>
+</ul>
+
+<h2 id="yet-another">Yet Another</h2>
+
+<p>クエリの実行だけに絞って見てきたが、実際には</p>
+
+<ul>
+  <li>Relation</li>
+  <li>Association</li>
+  <li>Migration</li>
+  <li>QueryCache</li>
+  <li>インスタンスの処理
+    <ul>
+      <li>saveなどで呼ばれるtransactionのコネクション指定</li>
+    </ul>
+  </li>
+  <li>その他connection操作
+    <ul>
+      <li>clear_all_connections!</li>
+      <li>clear_active_connections!</li>
+      <li>etc.</li>
+    </ul>
+  </li>
+</ul>
+
+<p>などコネクションの差替え以外にも作りこまなければいけない部分が多い。が、基本的には上で見てきた切替えがベースとなる。</p>
+
+<p>今私が作っているソーシャルゲームはRailsで書いていてDB ShardingはOctopusを使用しているんだけど、なかなか使いづらい所や不満もそこそこにはあったりする。もう直ってるけどコネクションプールを独自で管理してるのでコネクションがリクエストごとにロストしたりしてたこともある。また、他のDB系のライブラリ(annotate_modelsやdatabase_rewinderとか)が手を入れないとうまく動かない。都度パッチを投げても良いんだけど別の実装アイディアもあったりするので、最近プロトタイプ的な感じで1から新しく設計し始めている。</p>
+
+<p>Sharding用のライブラリはザックリと「コネクションの管理」と「シャードの特定」の2つの要素に分解してそれぞれをコンパクトに実装するのが大切だと思っている。コネクションの管理は各シャードへのコネクション確立とModelがクエリを実行するコネクションの切替部分、シャードの特定はその上で実装されるShardingやReplicationのロジックのことを指している。今作ろうとしているものはコネクションの管理をメインに行うつもりだ。</p>
+
+<p>特にコネクション管理をコンパクトに保つのはとても大切で、ActiveRecordの変更に追従するのは非常に困難であることはよく知られている。(実際に<a href="https://github.com/kovyrin/db-charmer">kovyrin/db-charmer</a>の作者は<a href="http://kovyrin.net/2014/11/14/dbcharmer-suspended/">ギブアップ</a>してしまった)コネクションの管理をうまく一般化・抽象化することができればそのGemが土台となって、ActiveRecordとの互換性を気にせず本当に作りたかった機能に注力出来て皆ハッピーみたいな事が出来ればとか考えていたりする。</p>
+
+<p>まあ実際にやってみるとActiveRecordの設計から大きく外れないように設計し、更には内部のAPIなどを極力呼ばない様に作っていくの抜け道を探しているような、パズルをしているような間隔でそれはそれで楽しいものだ。一種の縛りプレイをやっているような感覚に近いかもしれない。</p>
+
+<p>もう少し設計が固まってきたら、また纏めたいと思う。</p>
+
+  </div>
+</article>
+
+  </body>
+</html>

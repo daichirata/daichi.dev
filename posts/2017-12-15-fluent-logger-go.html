@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title>本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話</title>
+    <link rel="shortcut icon" href="/assets/images/favicon.ico">
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<meta name="generator" content="Jekyll v4.3.1" />
+<meta property="og:title" content="本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="description" content="この記事はGo4 Advent Calendar 2017の12/15のエントリです。" />
+<meta property="og:description" content="この記事はGo4 Advent Calendar 2017の12/15のエントリです。" />
+<link rel="canonical" href="https://daichi.dev/posts/2017-12-15-fluent-logger-go" />
+<meta property="og:url" content="https://daichi.dev/posts/2017-12-15-fluent-logger-go" />
+<meta property="og:site_name" content="daichi.dev" />
+<meta property="og:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2017-12-15T00:00:00+09:00" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta property="twitter:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="twitter:title" content="本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2017-12-15T00:00:00+09:00","datePublished":"2017-12-15T00:00:00+09:00","description":"この記事はGo4 Advent Calendar 2017の12/15のエントリです。","headline":"本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話","image":"https://daichi.dev/assets/images/og.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://daichi.dev/posts/2017-12-15-fluent-logger-go"},"url":"https://daichi.dev/posts/2017-12-15-fluent-logger-go"}</script>
+<!-- End Jekyll SEO tag -->
+
+  </head>
+  <body>
+    <header class="mx-4 lg:m-auto lg:w-2/3 py-6 flex items-center justify-between">
+      <h1><a href="/" class="text-2xl font-extrabold gradation-text">daichi.dev</a></h1>
+      <nav class="flex item-center">
+        <a class="pr-4" href="https://twitter.com/daichirata" target="_blank" rel="noopener noreferrer" title="Twitter"><svg height="25" width="25" viewBox="0 0 512 512"><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z" fill="#454C51"></path></svg></a>
+        <a href="https://github.com/daichirata" target="_blank" rel="noopener noreferrer" title="GitHub"><svg height="25" width="25" viewBox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" fill="#454C51"></path></svg></a>
+      </nav>
+    </header>
+    <article class="mx-4 lg:m-auto lg:w-2/3 prose max-w-none">
+  <header class="py-8">
+    <h1 class="mb-2 text-5xl lg:text-5xl tracking-tight text-black font-extrabold">本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話</h1>
+    <time class="tracking-tight text-gray-600 font-semibold" datetime="2017-12-15">2017-12-15</time>
+    <span class="mx-4 px-4 py-2 border-l-2 border-gray-300 text-gray-500 font-normal">
+      <a href="https://twitter.com/daichirata" class="no-underline">@daichirata</a>
+    </span>
+  </header>
+
+  <div class="text-xl subpixel-antialiased leading-relaxed break-words content">
+    <p>この記事は<a href="https://qiita.com/advent-calendar/2017/go4">Go4 Advent Calendar 2017</a>の12/15のエントリです。</p>
+
+<p><a href="https://qiita.com/advent-calendar/2017/go2">Go2 Advent Calendar 2017</a>の１日目の記事で、<a href="https://medium.com/@lestrrat/go-fluent-client%E3%81%AE%E7%B4%B9%E4%BB%8B-312e90fb0668">go-fluent-clientの紹介</a> という lestrrat さんの投稿があり、そういえば今年の初めに転職やら色々あって導入までは出来なかった Go の fluent-logger 作ったなということを思い出したので、当時どんな感じで作っていたかを踏まえて簡単に紹介してみようと思います。</p>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go">daichirata/fluent-logger-go</a></p>
+
+<p>元のコードに関しては導入しないと決めた時にとりあえずファイルだけ Github に上げてるだけの状態だったので一旦別ブランチに退避して、今回は当時を再現しつつ１からコミットし直してみたいと思います。</p>
+
+<p>そもそもなんでわざわざ作ったかというと、最近は Go をそもそもあまり触っていないので当時と同じ状況なのかどうかはわかりませんが、その時のモチベーションとして</p>
+
+<ul>
+  <li>fluentdに対して非同期にメッセージを送信したい (ここの送信でレスポンスに影響を出したくない)</li>
+  <li>送信できなかったメッセージは、そのイベントをキャッチしてファイルや別経路の出力に退避させたい</li>
+  <li>embedされた構造体を、そのまま logger に渡しても上手くエンコードして送信して欲しい
+    <ul>
+      <li>ちょっとここは記憶が曖昧ですが、確か何らかの制限があって Post するときには自分で map にして渡すのが一番安全という感じだったような気がします</li>
+    </ul>
+  </li>
+</ul>
+
+<p>という所があって、オフィシャルで対応するのは大改造が必要っぽくてちょっと厳しそう + logger だけなら作るのそんなに大変じゃなそうだったので作ったとかだったような。</p>
+
+<p>最終的には結構いい感じの速さになったんですが、不真面目なのでわりと感で最適化するアンチパターンで作っているので最適化の余地はかなりありそう。そもそも実戦投入出来ていないので導入もオススメ出来ません。</p>
+
+<p>というわけでそれでは後発らしく、より速く、よりちょっと便利を目指してやって行きましょう。</p>
+
+<h2 id="initial-commit">Initial Commit</h2>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/884b834e213fc999a3484feeba77fbeb68d2a942#diff-40646a6e1108f49d452915ba3515c206">884b834e213fc999a3484feeba77fbeb68d2a942</a></p>
+
+<p>最初のコミットに関しては、とりあえず動くことを目標に作ったので基本的に全ての機能が <code class="language-plaintext highlighter-rouge">logger.go</code> に同期処理で書かれてます。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span> <span class="n">Logger</span> <span class="k">struct</span> <span class="p">{</span>
+ 	<span class="n">conf</span> <span class="n">Config</span>
+	<span class="n">conn</span> <span class="n">io</span><span class="o">.</span><span class="n">WriteCloser</span>
+	<span class="n">bmu</span>	 <span class="n">sync</span><span class="o">.</span><span class="n">Mutex</span> <span class="c">// buffer mutex</span>
+	<span class="n">cmu</span>	 <span class="n">sync</span><span class="o">.</span><span class="n">Mutex</span> <span class="c">// connection mutex</span>
+	<span class="n">buf</span>	 <span class="p">[]</span><span class="kt">byte</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="p">(</span><span class="n">logger</span> <span class="o">*</span><span class="n">Logger</span><span class="p">)</span> <span class="n">PostWithTime</span><span class="p">(</span><span class="n">tag</span> <span class="kt">string</span><span class="p">,</span> <span class="n">t</span> <span class="n">time</span><span class="o">.</span><span class="n">Time</span><span class="p">,</span> <span class="n">obj</span> <span class="k">interface</span><span class="p">{})</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="n">record</span> <span class="o">:=</span> <span class="p">[]</span><span class="k">interface</span><span class="p">{}{</span>
+		<span class="n">tag</span><span class="p">,</span>
+		<span class="n">t</span><span class="o">.</span><span class="n">Unix</span><span class="p">(),</span>
+		<span class="n">obj</span><span class="p">,</span>
+	<span class="p">}</span>
+
+	<span class="n">buf</span> <span class="o">:=</span> <span class="n">bytes</span><span class="o">.</span><span class="n">NewBuffer</span><span class="p">([]</span><span class="kt">byte</span><span class="p">{})</span>
+	<span class="n">enc</span> <span class="o">:=</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">NewEncoder</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
+	<span class="k">if</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">enc</span><span class="o">.</span><span class="n">Encode</span><span class="p">(</span><span class="n">record</span><span class="p">);</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="n">err</span>
+	<span class="p">}</span>
+	<span class="n">raw</span> <span class="o">:=</span> <span class="n">buf</span><span class="o">.</span><span class="n">Bytes</span><span class="p">()</span>
+
+	<span class="n">logger</span><span class="o">.</span><span class="n">bmu</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+	<span class="n">logger</span><span class="o">.</span><span class="n">buf</span> <span class="o">=</span> <span class="nb">append</span><span class="p">(</span><span class="n">logger</span><span class="o">.</span><span class="n">buf</span><span class="p">,</span> <span class="n">raw</span><span class="o">...</span><span class="p">)</span>
+	<span class="n">logger</span><span class="o">.</span><span class="n">bmu</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+
+	<span class="k">return</span> <span class="n">logger</span><span class="o">.</span><span class="n">send</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">PostWithTime</code> でエンコードした後に <code class="language-plaintext highlighter-rouge">logger.buf</code> にデータを詰めて後は <code class="language-plaintext highlighter-rouge">send()</code> で送信してる感じで、一旦 buf に詰めてるのは送信に失敗した時にそのまま pending として扱う為です。
+Mutex を２つ持っているところとかが中々にダサいですが、最初としてはまあこんな所でしょう。この状態で一旦公式とベンチマークを取ってみます。(ちなみに、benchmarkは<a href="https://github.com/daichirata/fluent-logger-go/commit/884b834e213fc999a3484feeba77fbeb68d2a942#diff-65a092dcffc14579e220e826bc337b8d">このファイル</a>を最初からコミットしているので、今後は常にこちらを実行しています。)</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  100000	     14693 ns/op	    1958 B/op	      14 allocs/op
+BenchmarkStructOfficial-4     	  100000	     18444 ns/op	    4891 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  100000	     15340 ns/op	    1671 B/op	      13 allocs/op
+BenchmarkMapOfficial-4        	  100000	     19802 ns/op	    5971 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	7.535s
+</code></pre></div></div>
+
+<p>意外な事に現段階で既にオフィシャルより早いですが、そもそも機能が少ないという所もあるのでこの値より遅くならない事を目標にやって行きましょう。</p>
+
+<h2 id="送信を非同期に">送信を非同期に</h2>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/38301f437e598c84b097a7a4487d6fe927f56403">38301f437e598c84b097a7a4487d6fe927f56403</a></p>
+
+<p>先ずは、最初の目標として送信部分の非同期対応を行います。対応内容としては</p>
+
+<ul>
+  <li>fluentdへの接続を確立出来た後、送信用の goroutine を１つ立ち上げる</li>
+  <li>buffer に対する dirty channel を用意し、<code class="language-plaintext highlighter-rouge">Post</code> 実行時に send を呼び出す代わりに dirty に非同期で通知する</li>
+  <li>送信用 goroutine は、 dirty channel か ticker を契機に送信処理を実行する
+    <ul>
+      <li>dirty -&gt; 新規書き込み</li>
+      <li>ticker -&gt; 送信失敗時の pending データの送信</li>
+    </ul>
+  </li>
+</ul>
+
+<p>という感じです。正直まだまだ現段階では問題が沢山有ります。(この実装だとdirtyへの通知多いよねとか) が、これからコードをどんどん変えていくことになるのでどんどん先に行っちゃいましょう。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	     10172 ns/op	    1389 B/op	      14 allocs/op
+BenchmarkStructOfficial-4     	  100000	     20515 ns/op	    4839 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	     11976 ns/op	    1107 B/op	      13 allocs/op
+BenchmarkMapOfficial-4        	   50000	     23154 ns/op	    5929 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	8.343s
+</code></pre></div></div>
+
+<p>ナイーブな非同期対応でも、正常系だけ見ればそれなりに効果は出るっぽいですね。</p>
+
+<h2 id="buffer-を別の構造体として管理">Buffer を別の構造体として管理</h2>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/e0f40b163ac68657d734463a30a601190d64a498">e0f40b163ac68657d734463a30a601190d64a498</a></p>
+
+<p>この先作り込んでいく前に、早めの段階で logger の buffer を外に切り出してます。これで書込みの時と送信の時に logger 側から直接 Mutex を操作する必要がなくなったので、少し見通しが良くなったでしょうか。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	      7210 ns/op	    1601 B/op	      14 allocs/op
+BenchmarkStructOfficial-4     	  100000	     18486 ns/op	    4896 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	      7657 ns/op	    1194 B/op	      13 allocs/op
+BenchmarkMapOfficial-4        	  100000	     20273 ns/op	    5967 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	7.419s
+</code></pre></div></div>
+
+<p>パフォーマンス向上への影響も大きですね。 buffer を切り出すことでロックの粒度が細かくなったお陰で <code class="language-plaintext highlighter-rouge">send</code> のスループットが上がったからでしょうか。</p>
+
+<h2 id="エンコード用の-byte-slice-を-pool-で管理">エンコード用の byte slice を Pool で管理</h2>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/d0cdf96d8d53cee100097ee77d07bd4519452f10">d0cdf96d8d53cee100097ee77d07bd4519452f10</a></p>
+
+<p>基本的に logger などのように文字列など場合によっては大きなデータを扱いつつ、返り値としてはエラーなどしか返さないようなライブラリの場合は大抵 <code class="language-plaintext highlighter-rouge">sync.Pool</code> による最適化が可能です(ベストでは無いかもしれませんが)。 今回のケースで言うと <code class="language-plaintext highlighter-rouge">Post</code> で受け取った構造体を MessagePack にエンコードする際の byte slice は送信後その領域自体を使いますことが可能です。なので buffer に <code class="language-plaintext highlighter-rouge">Add</code> する際のデータを <code class="language-plaintext highlighter-rouge">[]byte</code> から <code class="language-plaintext highlighter-rouge">Message</code> 構造体に変え、その構造体を使いまわすように変更してみます。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	      6122 ns/op	    1311 B/op	       8 allocs/op
+BenchmarkStructOfficial-4     	  100000	     18993 ns/op	    4889 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	      6570 ns/op	     988 B/op	       7 allocs/op
+BenchmarkMapOfficial-4        	  100000	     20283 ns/op	    5974 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	7.036s
+</code></pre></div></div>
+
+<p>狙い通り、 allocation をかなり抑えることが出来てるっぽいですね。</p>
+
+<p>ついでに、 MessagePack のデコーダー自体も byte slice と対になるようにして使いまわすようにしてみました。</p>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/2620523219a24ad483ee54883cf1f60d86e6ef0e">2620523219a24ad483ee54883cf1f60d86e6ef0e</a></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	      5872 ns/op	    1257 B/op	       6 allocs/op
+BenchmarkStructOfficial-4     	  100000	     18894 ns/op	    4890 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	      6557 ns/op	     908 B/op	       5 allocs/op
+BenchmarkMapOfficial-4        	  100000	     20657 ns/op	    5969 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	6.993s
+</code></pre></div></div>
+
+<p>更に抑えられてていい感じですね。</p>
+
+<h2 id="buffer-の-dirty-通知を抑える">buffer の dirty 通知を抑える</h2>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/b81248d643ed44e2b7619bf47be88e285c33e05b">b81248d643ed44e2b7619bf47be88e285c33e05b</a></p>
+
+<p>最初の方で話していたとおり、今の実装だと dirty への書き込みが多すぎて、無駄に goroutine を抱えることになります。(と言うか <code class="language-plaintext highlighter-rouge">send</code> が止まると無限に増える) buffer への読み書きは常にロックを取ったシーケンシャルな処理なので、そこで対処できそうです。</p>
+
+<ul>
+  <li>buffer の領域を新規書き込みと、再送中のデータに分離</li>
+  <li>新規書き込み時、新規書き込みの領域にデータが溜まっていない(そのデータのみ)場合のみ、dirty 通知を行う
+    <ul>
+      <li>データが既にある場合、通知済みで pop されるのを待っている状態なので不要です</li>
+    </ul>
+  </li>
+</ul>
+
+<p>という感じで対応してみました。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	      5759 ns/op	    1516 B/op	       8 allocs/op
+BenchmarkStructOfficial-4     	  100000	     18354 ns/op	    4897 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	      5508 ns/op	    1220 B/op	       7 allocs/op
+BenchmarkMapOfficial-4        	  100000	     20165 ns/op	    5960 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	6.666s
+</code></pre></div></div>
+
+<p>領域が増えたことで allocation とメモリの消費量が増えてしまっていますが、対応しなければ行けない所なので諦めましょう。ちょっとだけ性能が改善しているのは誤差か或いは goroutine の起動が抑えられているからかもしれません。</p>
+
+<h2 id="再送系の処理を-circuitbreaker-で改善">再送系の処理を CircuitBreaker で改善</h2>
+
+<p>ネットワークの再送といえばAWSでよく使われるので Exponential Backoff の概念が最近だとよく見かけます。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">MAX_RETRIES</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">retries</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="k">begin</span>
+    <span class="sr">//</span> <span class="err">何かの処理</span>
+<span class="k">rescue</span> <span class="o">=&gt;</span> <span class="n">e</span>
+  <span class="k">if</span> <span class="n">retries</span> <span class="o">&lt;</span> <span class="no">MAX_RETRIES</span>
+    <span class="n">retries</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="nb">sleep</span> <span class="mi">2</span> <span class="o">**</span> <span class="n">i</span>
+    <span class="k">retry</span>
+  <span class="k">else</span>
+    <span class="k">raise</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>今回は更に、書き込みでエラーが起きた際には別の出力に切り替えるみたいな処理を間に挟みたいと思っているので、上記リトライに近いことが出来て更にブロックせずに扱いやすい CircuitBreaker を導入します。</p>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/3112bd1ec8a12ed164560fa34bd5598b0caabcf1">3112bd1ec8a12ed164560fa34bd5598b0caabcf1</a></p>
+
+<p>先ずはバッファ周りの処理と書き込み処理を分離。</p>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/cd0e0b7e95988cd7416b9386cfa74c22c7f64c36">cd0e0b7e95988cd7416b9386cfa74c22c7f64c36</a></p>
+
+<p>次に CircuitBreaker を導入します。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="p">(</span><span class="n">logger</span> <span class="o">*</span><span class="n">Logger</span><span class="p">)</span> <span class="n">Subscribe</span><span class="p">()</span> <span class="o">&lt;-</span><span class="k">chan</span> <span class="n">circuit</span><span class="o">.</span><span class="n">BreakerEvent</span> <span class="p">{</span>
+</code></pre></div></div>
+
+<p>で channel でイベントを受け取れるようにしているので、 fluent の書き込みに失敗した時にログを吐いて監視システムで拾うとかすると便利かもしれません。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	      5970 ns/op	    1447 B/op	       8 allocs/op
+BenchmarkStructOfficial-4     	  100000	     19022 ns/op	    4856 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	      6034 ns/op	    1091 B/op	       6 allocs/op
+BenchmarkMapOfficial-4        	  100000	     21286 ns/op	    5938 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	7.005s
+</code></pre></div></div>
+
+<p>パフォーマンス的にも特に問題なさそうですね。</p>
+
+<h2 id="errorhandler-の概念を追加">ErrorHandler の概念を追加</h2>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/af41bfd784ca84efef94a7b09d024953367c6657">af41bfd784ca84efef94a7b09d024953367c6657</a></p>
+
+<p>最後に、一番やりたかったエラーが起きたときにハンドルする為のAPIを追加していきます。Go には <code class="language-plaintext highlighter-rouge">http.HandlerFunc</code> という関数型に対して関数を定義するという中々カッコイイ機能があるので、それを参考にします。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span> <span class="n">Logger</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">ErrorHandler</span> <span class="n">ErrorHandler</span>
+
+<span class="c">// ......</span>
+
+<span class="k">if</span> <span class="n">logger</span><span class="o">.</span><span class="n">ErrorHandler</span> <span class="o">!=</span> <span class="no">nil</span> <span class="o">&amp;&amp;</span> <span class="nb">len</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">logger</span><span class="o">.</span><span class="n">conf</span><span class="o">.</span><span class="n">PendingLimit</span> <span class="p">{</span>
+	<span class="n">err</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">ErrorHandler</span><span class="o">.</span><span class="n">HandleError</span><span class="p">(</span><span class="n">err</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="c">// ......</span>
+
+<span class="k">type</span> <span class="n">ErrorHandler</span> <span class="k">interface</span> <span class="p">{</span>
+	<span class="n">HandleError</span><span class="p">(</span><span class="kt">error</span><span class="p">,</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">)</span> <span class="kt">error</span>
+<span class="p">}</span>
+
+<span class="k">type</span> <span class="n">ErrorHandlerFunc</span> <span class="k">func</span><span class="p">(</span><span class="kt">error</span><span class="p">,</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">)</span> <span class="kt">error</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">f</span> <span class="n">ErrorHandlerFunc</span><span class="p">)</span> <span class="n">HandleError</span><span class="p">(</span><span class="n">err</span> <span class="kt">error</span><span class="p">,</span> <span class="n">data</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="n">f</span><span class="p">(</span><span class="n">err</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>このように定義しており、無名関数を <code class="language-plaintext highlighter-rouge">ErrorHandlerFunc</code> にキャストするか或いは <code class="language-plaintext highlighter-rouge">HandleError</code> を実装した構造体で、エラーが発生した場合に処理を受けれるようになっています。</p>
+
+<p>具体的な使用例を幾つか追加していて、例えば書き込みに失敗した場合、もう一つの logger にフォールバックしたり、データをJSONとして指定した io.Writer に流すとかを出来るようにしています。</p>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/af41bfd784ca84efef94a7b09d024953367c6657#diff-6380769465fc46693ec2f678e1e26be3">error_handler.go</a></p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">logger</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">fluent</span><span class="o">.</span><span class="n">NewLogger</span><span class="p">(</span><span class="n">fluent</span><span class="o">.</span><span class="n">Config</span><span class="p">{})</span>
+<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+	<span class="c">// TODO: Handle error.</span>
+<span class="p">}</span>
+
+<span class="c">// Logging error.</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">ErrorHandler</span> <span class="o">=</span> <span class="n">fluent</span><span class="o">.</span><span class="n">ErrorHandlerFunc</span><span class="p">(</span><span class="k">func</span><span class="p">(</span><span class="n">err</span> <span class="kt">error</span><span class="p">,</span> <span class="n">_</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="n">log</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+	<span class="k">return</span> <span class="n">err</span>
+<span class="p">})</span>
+
+<span class="c">// Fallback logger.</span>
+<span class="n">fallback</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">fluent</span><span class="o">.</span><span class="n">NewLogger</span><span class="p">(</span><span class="n">fluent</span><span class="o">.</span><span class="n">Config</span><span class="p">{})</span>
+<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+	<span class="c">// TODO: Handle error.</span>
+<span class="p">}</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">ErrorHandler</span> <span class="o">=</span> <span class="n">fluent</span><span class="o">.</span><span class="n">NewFallbackHandler</span><span class="p">(</span><span class="n">fallback</span><span class="p">)</span>
+
+<span class="c">// Fallback json to stdout.</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">ErrorHandler</span> <span class="o">=</span> <span class="n">fluent</span><span class="o">.</span><span class="n">NewFallbackJSONHandler</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">Stdout</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>この機能の特徴として、<code class="language-plaintext highlighter-rouge">HandleError</code> と送信のエラー判定を結合させています。つまり、この関数がエラーを返さなかった場合はメッセージは pending にならずに成功したものとして扱います。逆にいうとエラーを返した場合は同じメッセージが何回も流れて来ます。フォールバックさせる場合には再送周りをコントロールする必要があるので、この方が何かと都合が良かったりするので一旦この形で落ち着いています。</p>
+
+<h2 id="パフォーマンス">パフォーマンス</h2>
+
+<p>というわけで、色々やってきましたが最終的なベンチマークはこんな感じになりました。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	      6027 ns/op	    1474 B/op	       8 allocs/op
+BenchmarkStructOfficial-4     	  100000	     18551 ns/op	    4889 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	      7070 ns/op	     929 B/op	       6 allocs/op
+BenchmarkMapOfficial-4        	  100000	     21664 ns/op	    5930 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	7.227s
+</code></pre></div></div>
+
+<p>結構誤差が出るので参考程度ですが、そこそこ良い結果にはなっているのではないでしょうか。ついでに lestrrat さんの奴のもやってみました。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// +build bench</span>
+
+<span class="k">package</span> <span class="n">fluent_test</span>
+
+<span class="k">import</span> <span class="p">(</span>
+	<span class="s">"testing"</span>
+
+	<span class="n">daichirata</span> <span class="s">"github.com/daichirata/fluent-logger-go"</span>
+	<span class="n">official</span> <span class="s">"github.com/fluent/fluent-logger-golang/fluent"</span>
+	<span class="n">k0kubun</span> <span class="s">"github.com/k0kubun/fluent-logger-go"</span>
+	<span class="n">lestrrat</span> <span class="s">"github.com/lestrrat/go-fluent-client"</span>
+<span class="p">)</span>
+
+<span class="k">const</span> <span class="n">tag</span> <span class="o">=</span> <span class="s">"debug.test"</span>
+<span class="k">const</span> <span class="n">postsPerIter</span> <span class="o">=</span> <span class="m">1</span>
+
+<span class="k">func</span> <span class="n">BenchmarkK0kubun</span><span class="p">(</span><span class="n">b</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">B</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">c</span> <span class="o">:=</span> <span class="n">k0kubun</span><span class="o">.</span><span class="n">NewLogger</span><span class="p">(</span><span class="n">k0kubun</span><span class="o">.</span><span class="n">Config</span><span class="p">{})</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">b</span><span class="o">.</span><span class="n">N</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">for</span> <span class="n">j</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">postsPerIter</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span> <span class="p">{</span>
+			<span class="n">c</span><span class="o">.</span><span class="n">Post</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="k">interface</span><span class="p">{}{</span><span class="s">"count"</span><span class="o">:</span> <span class="n">j</span><span class="p">})</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">BenchmarkDaichirata</span><span class="p">(</span><span class="n">b</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">B</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">c</span><span class="p">,</span> <span class="n">_</span> <span class="o">:=</span> <span class="n">daichirata</span><span class="o">.</span><span class="n">NewLogger</span><span class="p">(</span><span class="n">daichirata</span><span class="o">.</span><span class="n">Config</span><span class="p">{})</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">b</span><span class="o">.</span><span class="n">N</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">for</span> <span class="n">j</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">postsPerIter</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span> <span class="p">{</span>
+			<span class="n">c</span><span class="o">.</span><span class="n">Post</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="k">interface</span><span class="p">{}{</span><span class="s">"count"</span><span class="o">:</span> <span class="n">j</span><span class="p">})</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="n">c</span><span class="o">.</span><span class="n">Close</span><span class="p">()</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">BenchmarkLestrrat</span><span class="p">(</span><span class="n">b</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">B</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">c</span><span class="p">,</span> <span class="n">_</span> <span class="o">:=</span> <span class="n">lestrrat</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">b</span><span class="o">.</span><span class="n">N</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">for</span> <span class="n">j</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">postsPerIter</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">Post</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="k">interface</span><span class="p">{}{</span><span class="s">"count"</span><span class="o">:</span> <span class="n">j</span><span class="p">})</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="n">b</span><span class="o">.</span><span class="n">Logf</span><span class="p">(</span><span class="s">"whoa Post failed"</span><span class="p">)</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="n">c</span><span class="o">.</span><span class="n">Shutdown</span><span class="p">(</span><span class="no">nil</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">BenchmarkLestrratUnbuffered</span><span class="p">(</span><span class="n">b</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">B</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">c</span><span class="p">,</span> <span class="n">_</span> <span class="o">:=</span> <span class="n">lestrrat</span><span class="o">.</span><span class="n">New</span><span class="p">(</span><span class="n">lestrrat</span><span class="o">.</span><span class="n">WithBuffered</span><span class="p">(</span><span class="no">false</span><span class="p">))</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">b</span><span class="o">.</span><span class="n">N</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">for</span> <span class="n">j</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">postsPerIter</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">Post</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="k">interface</span><span class="p">{}{</span><span class="s">"count"</span><span class="o">:</span> <span class="n">j</span><span class="p">})</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="n">b</span><span class="o">.</span><span class="n">Logf</span><span class="p">(</span><span class="s">"whoa Post failed"</span><span class="p">)</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="n">c</span><span class="o">.</span><span class="n">Shutdown</span><span class="p">(</span><span class="no">nil</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">BenchmarkOfficial</span><span class="p">(</span><span class="n">b</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">B</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">c</span><span class="p">,</span> <span class="n">_</span> <span class="o">:=</span> <span class="n">official</span><span class="o">.</span><span class="n">New</span><span class="p">(</span><span class="n">official</span><span class="o">.</span><span class="n">Config</span><span class="p">{})</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">b</span><span class="o">.</span><span class="n">N</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">for</span> <span class="n">j</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">postsPerIter</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">Post</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="k">interface</span><span class="p">{}{</span><span class="s">"count"</span><span class="o">:</span> <span class="n">j</span><span class="p">})</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="n">b</span><span class="o">.</span><span class="n">Logf</span><span class="p">(</span><span class="s">"whoa Post failed"</span><span class="p">)</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="n">c</span><span class="o">.</span><span class="n">Close</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ go test -run=none -bench=. -benchmem -tags bench
+
+goos: darwin
+goarch: amd64
+pkg: github.com/lestrrat/go-fluent-client
+BenchmarkK0kubun-4              	  500000	      3191 ns/op	    1679 B/op	      13 allocs/op
+BenchmarkDaichirata-4           	  500000	      3152 ns/op	     829 B/op	      10 allocs/op
+BenchmarkLestrrat-4             	  500000	      3838 ns/op	     529 B/op	       7 allocs/op
+BenchmarkLestrratUnbuffered-4   	  300000	      8682 ns/op	     512 B/op	       7 allocs/op
+BenchmarkOfficial-4             	  200000	      8893 ns/op	     896 B/op	       9 allocs/op
+PASS
+ok  	github.com/lestrrat/go-fluent-client	10.610s
+</code></pre></div></div>
+
+<p>というわけで、 <code class="language-plaintext highlighter-rouge">github.com/k0kubun/fluent-logger-go</code> と大体同じくらいでしょうか。(ただ、こちらは終了時に buffer を flush することが出来ないっぽいのでちょっと実用的には微妙かなという感じはありますが) それにしても lestrrat さんのやつはエンコーダーとデコーダーを自作してるみたいですし 7 allocs/op 凄いですね。</p>
+
+<h2 id="終わり">終わり</h2>
+
+<p>最近 Go を全然書いていないので久しぶりに触る機会で来て楽しかった。おわり。</p>
+
+  </div>
+</article>
+
+  </body>
+</html>
