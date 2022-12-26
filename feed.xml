@@ -1,0 +1,2296 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="ja_JP"><generator uri="https://jekyllrb.com/" version="4.3.1">Jekyll</generator><link href="https://daichi.dev/feed.xml" rel="self" type="application/atom+xml" /><link href="https://daichi.dev/" rel="alternate" type="text/html" hreflang="ja_JP" /><updated>2022-12-27T03:09:46+09:00</updated><id>https://daichi.dev/feed.xml</id><title type="html">daichi.dev</title><subtitle>プログラミングや日々開発してる上で感じた事、日常について書いています。</subtitle><entry><title type="html">本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話</title><link href="https://daichi.dev/posts/2017-12-15-fluent-logger-go" rel="alternate" type="text/html" title="本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話" /><published>2017-12-15T00:00:00+09:00</published><updated>2017-12-15T00:00:00+09:00</updated><id>https://daichi.dev/posts/fluent-logger-go</id><content type="html" xml:base="https://daichi.dev/posts/2017-12-15-fluent-logger-go"><![CDATA[<p>この記事は<a href="https://qiita.com/advent-calendar/2017/go4">Go4 Advent Calendar 2017</a>の12/15のエントリです。</p>
+
+<p><a href="https://qiita.com/advent-calendar/2017/go2">Go2 Advent Calendar 2017</a>の１日目の記事で、<a href="https://medium.com/@lestrrat/go-fluent-client%E3%81%AE%E7%B4%B9%E4%BB%8B-312e90fb0668">go-fluent-clientの紹介</a> という lestrrat さんの投稿があり、そういえば今年の初めに転職やら色々あって導入までは出来なかった Go の fluent-logger 作ったなということを思い出したので、当時どんな感じで作っていたかを踏まえて簡単に紹介してみようと思います。</p>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go">daichirata/fluent-logger-go</a></p>
+
+<p>元のコードに関しては導入しないと決めた時にとりあえずファイルだけ Github に上げてるだけの状態だったので一旦別ブランチに退避して、今回は当時を再現しつつ１からコミットし直してみたいと思います。</p>
+
+<p>そもそもなんでわざわざ作ったかというと、最近は Go をそもそもあまり触っていないので当時と同じ状況なのかどうかはわかりませんが、その時のモチベーションとして</p>
+
+<ul>
+  <li>fluentdに対して非同期にメッセージを送信したい (ここの送信でレスポンスに影響を出したくない)</li>
+  <li>送信できなかったメッセージは、そのイベントをキャッチしてファイルや別経路の出力に退避させたい</li>
+  <li>embedされた構造体を、そのまま logger に渡しても上手くエンコードして送信して欲しい
+    <ul>
+      <li>ちょっとここは記憶が曖昧ですが、確か何らかの制限があって Post するときには自分で map にして渡すのが一番安全という感じだったような気がします</li>
+    </ul>
+  </li>
+</ul>
+
+<p>という所があって、オフィシャルで対応するのは大改造が必要っぽくてちょっと厳しそう + logger だけなら作るのそんなに大変じゃなそうだったので作ったとかだったような。</p>
+
+<p>最終的には結構いい感じの速さになったんですが、不真面目なのでわりと感で最適化するアンチパターンで作っているので最適化の余地はかなりありそう。そもそも実戦投入出来ていないので導入もオススメ出来ません。</p>
+
+<p>というわけでそれでは後発らしく、より速く、よりちょっと便利を目指してやって行きましょう。</p>
+
+<h2 id="initial-commit">Initial Commit</h2>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/884b834e213fc999a3484feeba77fbeb68d2a942#diff-40646a6e1108f49d452915ba3515c206">884b834e213fc999a3484feeba77fbeb68d2a942</a></p>
+
+<p>最初のコミットに関しては、とりあえず動くことを目標に作ったので基本的に全ての機能が <code class="language-plaintext highlighter-rouge">logger.go</code> に同期処理で書かれてます。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span> <span class="n">Logger</span> <span class="k">struct</span> <span class="p">{</span>
+ 	<span class="n">conf</span> <span class="n">Config</span>
+	<span class="n">conn</span> <span class="n">io</span><span class="o">.</span><span class="n">WriteCloser</span>
+	<span class="n">bmu</span>	 <span class="n">sync</span><span class="o">.</span><span class="n">Mutex</span> <span class="c">// buffer mutex</span>
+	<span class="n">cmu</span>	 <span class="n">sync</span><span class="o">.</span><span class="n">Mutex</span> <span class="c">// connection mutex</span>
+	<span class="n">buf</span>	 <span class="p">[]</span><span class="kt">byte</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="p">(</span><span class="n">logger</span> <span class="o">*</span><span class="n">Logger</span><span class="p">)</span> <span class="n">PostWithTime</span><span class="p">(</span><span class="n">tag</span> <span class="kt">string</span><span class="p">,</span> <span class="n">t</span> <span class="n">time</span><span class="o">.</span><span class="n">Time</span><span class="p">,</span> <span class="n">obj</span> <span class="k">interface</span><span class="p">{})</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="n">record</span> <span class="o">:=</span> <span class="p">[]</span><span class="k">interface</span><span class="p">{}{</span>
+		<span class="n">tag</span><span class="p">,</span>
+		<span class="n">t</span><span class="o">.</span><span class="n">Unix</span><span class="p">(),</span>
+		<span class="n">obj</span><span class="p">,</span>
+	<span class="p">}</span>
+
+	<span class="n">buf</span> <span class="o">:=</span> <span class="n">bytes</span><span class="o">.</span><span class="n">NewBuffer</span><span class="p">([]</span><span class="kt">byte</span><span class="p">{})</span>
+	<span class="n">enc</span> <span class="o">:=</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">NewEncoder</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
+	<span class="k">if</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">enc</span><span class="o">.</span><span class="n">Encode</span><span class="p">(</span><span class="n">record</span><span class="p">);</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="n">err</span>
+	<span class="p">}</span>
+	<span class="n">raw</span> <span class="o">:=</span> <span class="n">buf</span><span class="o">.</span><span class="n">Bytes</span><span class="p">()</span>
+
+	<span class="n">logger</span><span class="o">.</span><span class="n">bmu</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+	<span class="n">logger</span><span class="o">.</span><span class="n">buf</span> <span class="o">=</span> <span class="nb">append</span><span class="p">(</span><span class="n">logger</span><span class="o">.</span><span class="n">buf</span><span class="p">,</span> <span class="n">raw</span><span class="o">...</span><span class="p">)</span>
+	<span class="n">logger</span><span class="o">.</span><span class="n">bmu</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+
+	<span class="k">return</span> <span class="n">logger</span><span class="o">.</span><span class="n">send</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">PostWithTime</code> でエンコードした後に <code class="language-plaintext highlighter-rouge">logger.buf</code> にデータを詰めて後は <code class="language-plaintext highlighter-rouge">send()</code> で送信してる感じで、一旦 buf に詰めてるのは送信に失敗した時にそのまま pending として扱う為です。
+Mutex を２つ持っているところとかが中々にダサいですが、最初としてはまあこんな所でしょう。この状態で一旦公式とベンチマークを取ってみます。(ちなみに、benchmarkは<a href="https://github.com/daichirata/fluent-logger-go/commit/884b834e213fc999a3484feeba77fbeb68d2a942#diff-65a092dcffc14579e220e826bc337b8d">このファイル</a>を最初からコミットしているので、今後は常にこちらを実行しています。)</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  100000	     14693 ns/op	    1958 B/op	      14 allocs/op
+BenchmarkStructOfficial-4     	  100000	     18444 ns/op	    4891 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  100000	     15340 ns/op	    1671 B/op	      13 allocs/op
+BenchmarkMapOfficial-4        	  100000	     19802 ns/op	    5971 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	7.535s
+</code></pre></div></div>
+
+<p>意外な事に現段階で既にオフィシャルより早いですが、そもそも機能が少ないという所もあるのでこの値より遅くならない事を目標にやって行きましょう。</p>
+
+<h2 id="送信を非同期に">送信を非同期に</h2>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/38301f437e598c84b097a7a4487d6fe927f56403">38301f437e598c84b097a7a4487d6fe927f56403</a></p>
+
+<p>先ずは、最初の目標として送信部分の非同期対応を行います。対応内容としては</p>
+
+<ul>
+  <li>fluentdへの接続を確立出来た後、送信用の goroutine を１つ立ち上げる</li>
+  <li>buffer に対する dirty channel を用意し、<code class="language-plaintext highlighter-rouge">Post</code> 実行時に send を呼び出す代わりに dirty に非同期で通知する</li>
+  <li>送信用 goroutine は、 dirty channel か ticker を契機に送信処理を実行する
+    <ul>
+      <li>dirty -&gt; 新規書き込み</li>
+      <li>ticker -&gt; 送信失敗時の pending データの送信</li>
+    </ul>
+  </li>
+</ul>
+
+<p>という感じです。正直まだまだ現段階では問題が沢山有ります。(この実装だとdirtyへの通知多いよねとか) が、これからコードをどんどん変えていくことになるのでどんどん先に行っちゃいましょう。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	     10172 ns/op	    1389 B/op	      14 allocs/op
+BenchmarkStructOfficial-4     	  100000	     20515 ns/op	    4839 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	     11976 ns/op	    1107 B/op	      13 allocs/op
+BenchmarkMapOfficial-4        	   50000	     23154 ns/op	    5929 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	8.343s
+</code></pre></div></div>
+
+<p>ナイーブな非同期対応でも、正常系だけ見ればそれなりに効果は出るっぽいですね。</p>
+
+<h2 id="buffer-を別の構造体として管理">Buffer を別の構造体として管理</h2>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/e0f40b163ac68657d734463a30a601190d64a498">e0f40b163ac68657d734463a30a601190d64a498</a></p>
+
+<p>この先作り込んでいく前に、早めの段階で logger の buffer を外に切り出してます。これで書込みの時と送信の時に logger 側から直接 Mutex を操作する必要がなくなったので、少し見通しが良くなったでしょうか。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	      7210 ns/op	    1601 B/op	      14 allocs/op
+BenchmarkStructOfficial-4     	  100000	     18486 ns/op	    4896 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	      7657 ns/op	    1194 B/op	      13 allocs/op
+BenchmarkMapOfficial-4        	  100000	     20273 ns/op	    5967 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	7.419s
+</code></pre></div></div>
+
+<p>パフォーマンス向上への影響も大きですね。 buffer を切り出すことでロックの粒度が細かくなったお陰で <code class="language-plaintext highlighter-rouge">send</code> のスループットが上がったからでしょうか。</p>
+
+<h2 id="エンコード用の-byte-slice-を-pool-で管理">エンコード用の byte slice を Pool で管理</h2>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/d0cdf96d8d53cee100097ee77d07bd4519452f10">d0cdf96d8d53cee100097ee77d07bd4519452f10</a></p>
+
+<p>基本的に logger などのように文字列など場合によっては大きなデータを扱いつつ、返り値としてはエラーなどしか返さないようなライブラリの場合は大抵 <code class="language-plaintext highlighter-rouge">sync.Pool</code> による最適化が可能です(ベストでは無いかもしれませんが)。 今回のケースで言うと <code class="language-plaintext highlighter-rouge">Post</code> で受け取った構造体を MessagePack にエンコードする際の byte slice は送信後その領域自体を使いますことが可能です。なので buffer に <code class="language-plaintext highlighter-rouge">Add</code> する際のデータを <code class="language-plaintext highlighter-rouge">[]byte</code> から <code class="language-plaintext highlighter-rouge">Message</code> 構造体に変え、その構造体を使いまわすように変更してみます。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	      6122 ns/op	    1311 B/op	       8 allocs/op
+BenchmarkStructOfficial-4     	  100000	     18993 ns/op	    4889 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	      6570 ns/op	     988 B/op	       7 allocs/op
+BenchmarkMapOfficial-4        	  100000	     20283 ns/op	    5974 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	7.036s
+</code></pre></div></div>
+
+<p>狙い通り、 allocation をかなり抑えることが出来てるっぽいですね。</p>
+
+<p>ついでに、 MessagePack のデコーダー自体も byte slice と対になるようにして使いまわすようにしてみました。</p>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/2620523219a24ad483ee54883cf1f60d86e6ef0e">2620523219a24ad483ee54883cf1f60d86e6ef0e</a></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	      5872 ns/op	    1257 B/op	       6 allocs/op
+BenchmarkStructOfficial-4     	  100000	     18894 ns/op	    4890 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	      6557 ns/op	     908 B/op	       5 allocs/op
+BenchmarkMapOfficial-4        	  100000	     20657 ns/op	    5969 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	6.993s
+</code></pre></div></div>
+
+<p>更に抑えられてていい感じですね。</p>
+
+<h2 id="buffer-の-dirty-通知を抑える">buffer の dirty 通知を抑える</h2>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/b81248d643ed44e2b7619bf47be88e285c33e05b">b81248d643ed44e2b7619bf47be88e285c33e05b</a></p>
+
+<p>最初の方で話していたとおり、今の実装だと dirty への書き込みが多すぎて、無駄に goroutine を抱えることになります。(と言うか <code class="language-plaintext highlighter-rouge">send</code> が止まると無限に増える) buffer への読み書きは常にロックを取ったシーケンシャルな処理なので、そこで対処できそうです。</p>
+
+<ul>
+  <li>buffer の領域を新規書き込みと、再送中のデータに分離</li>
+  <li>新規書き込み時、新規書き込みの領域にデータが溜まっていない(そのデータのみ)場合のみ、dirty 通知を行う
+    <ul>
+      <li>データが既にある場合、通知済みで pop されるのを待っている状態なので不要です</li>
+    </ul>
+  </li>
+</ul>
+
+<p>という感じで対応してみました。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	      5759 ns/op	    1516 B/op	       8 allocs/op
+BenchmarkStructOfficial-4     	  100000	     18354 ns/op	    4897 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	      5508 ns/op	    1220 B/op	       7 allocs/op
+BenchmarkMapOfficial-4        	  100000	     20165 ns/op	    5960 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	6.666s
+</code></pre></div></div>
+
+<p>領域が増えたことで allocation とメモリの消費量が増えてしまっていますが、対応しなければ行けない所なので諦めましょう。ちょっとだけ性能が改善しているのは誤差か或いは goroutine の起動が抑えられているからかもしれません。</p>
+
+<h2 id="再送系の処理を-circuitbreaker-で改善">再送系の処理を CircuitBreaker で改善</h2>
+
+<p>ネットワークの再送といえばAWSでよく使われるので Exponential Backoff の概念が最近だとよく見かけます。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">MAX_RETRIES</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">retries</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="k">begin</span>
+    <span class="sr">//</span> <span class="err">何かの処理</span>
+<span class="k">rescue</span> <span class="o">=&gt;</span> <span class="n">e</span>
+  <span class="k">if</span> <span class="n">retries</span> <span class="o">&lt;</span> <span class="no">MAX_RETRIES</span>
+    <span class="n">retries</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="nb">sleep</span> <span class="mi">2</span> <span class="o">**</span> <span class="n">i</span>
+    <span class="k">retry</span>
+  <span class="k">else</span>
+    <span class="k">raise</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>今回は更に、書き込みでエラーが起きた際には別の出力に切り替えるみたいな処理を間に挟みたいと思っているので、上記リトライに近いことが出来て更にブロックせずに扱いやすい CircuitBreaker を導入します。</p>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/3112bd1ec8a12ed164560fa34bd5598b0caabcf1">3112bd1ec8a12ed164560fa34bd5598b0caabcf1</a></p>
+
+<p>先ずはバッファ周りの処理と書き込み処理を分離。</p>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/cd0e0b7e95988cd7416b9386cfa74c22c7f64c36">cd0e0b7e95988cd7416b9386cfa74c22c7f64c36</a></p>
+
+<p>次に CircuitBreaker を導入します。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="p">(</span><span class="n">logger</span> <span class="o">*</span><span class="n">Logger</span><span class="p">)</span> <span class="n">Subscribe</span><span class="p">()</span> <span class="o">&lt;-</span><span class="k">chan</span> <span class="n">circuit</span><span class="o">.</span><span class="n">BreakerEvent</span> <span class="p">{</span>
+</code></pre></div></div>
+
+<p>で channel でイベントを受け取れるようにしているので、 fluent の書き込みに失敗した時にログを吐いて監視システムで拾うとかすると便利かもしれません。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	      5970 ns/op	    1447 B/op	       8 allocs/op
+BenchmarkStructOfficial-4     	  100000	     19022 ns/op	    4856 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	      6034 ns/op	    1091 B/op	       6 allocs/op
+BenchmarkMapOfficial-4        	  100000	     21286 ns/op	    5938 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	7.005s
+</code></pre></div></div>
+
+<p>パフォーマンス的にも特に問題なさそうですね。</p>
+
+<h2 id="errorhandler-の概念を追加">ErrorHandler の概念を追加</h2>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/af41bfd784ca84efef94a7b09d024953367c6657">af41bfd784ca84efef94a7b09d024953367c6657</a></p>
+
+<p>最後に、一番やりたかったエラーが起きたときにハンドルする為のAPIを追加していきます。Go には <code class="language-plaintext highlighter-rouge">http.HandlerFunc</code> という関数型に対して関数を定義するという中々カッコイイ機能があるので、それを参考にします。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span> <span class="n">Logger</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">ErrorHandler</span> <span class="n">ErrorHandler</span>
+
+<span class="c">// ......</span>
+
+<span class="k">if</span> <span class="n">logger</span><span class="o">.</span><span class="n">ErrorHandler</span> <span class="o">!=</span> <span class="no">nil</span> <span class="o">&amp;&amp;</span> <span class="nb">len</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">logger</span><span class="o">.</span><span class="n">conf</span><span class="o">.</span><span class="n">PendingLimit</span> <span class="p">{</span>
+	<span class="n">err</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">ErrorHandler</span><span class="o">.</span><span class="n">HandleError</span><span class="p">(</span><span class="n">err</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="c">// ......</span>
+
+<span class="k">type</span> <span class="n">ErrorHandler</span> <span class="k">interface</span> <span class="p">{</span>
+	<span class="n">HandleError</span><span class="p">(</span><span class="kt">error</span><span class="p">,</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">)</span> <span class="kt">error</span>
+<span class="p">}</span>
+
+<span class="k">type</span> <span class="n">ErrorHandlerFunc</span> <span class="k">func</span><span class="p">(</span><span class="kt">error</span><span class="p">,</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">)</span> <span class="kt">error</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">f</span> <span class="n">ErrorHandlerFunc</span><span class="p">)</span> <span class="n">HandleError</span><span class="p">(</span><span class="n">err</span> <span class="kt">error</span><span class="p">,</span> <span class="n">data</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="n">f</span><span class="p">(</span><span class="n">err</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>このように定義しており、無名関数を <code class="language-plaintext highlighter-rouge">ErrorHandlerFunc</code> にキャストするか或いは <code class="language-plaintext highlighter-rouge">HandleError</code> を実装した構造体で、エラーが発生した場合に処理を受けれるようになっています。</p>
+
+<p>具体的な使用例を幾つか追加していて、例えば書き込みに失敗した場合、もう一つの logger にフォールバックしたり、データをJSONとして指定した io.Writer に流すとかを出来るようにしています。</p>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/commit/af41bfd784ca84efef94a7b09d024953367c6657#diff-6380769465fc46693ec2f678e1e26be3">error_handler.go</a></p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">logger</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">fluent</span><span class="o">.</span><span class="n">NewLogger</span><span class="p">(</span><span class="n">fluent</span><span class="o">.</span><span class="n">Config</span><span class="p">{})</span>
+<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+	<span class="c">// TODO: Handle error.</span>
+<span class="p">}</span>
+
+<span class="c">// Logging error.</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">ErrorHandler</span> <span class="o">=</span> <span class="n">fluent</span><span class="o">.</span><span class="n">ErrorHandlerFunc</span><span class="p">(</span><span class="k">func</span><span class="p">(</span><span class="n">err</span> <span class="kt">error</span><span class="p">,</span> <span class="n">_</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="n">log</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+	<span class="k">return</span> <span class="n">err</span>
+<span class="p">})</span>
+
+<span class="c">// Fallback logger.</span>
+<span class="n">fallback</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">fluent</span><span class="o">.</span><span class="n">NewLogger</span><span class="p">(</span><span class="n">fluent</span><span class="o">.</span><span class="n">Config</span><span class="p">{})</span>
+<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+	<span class="c">// TODO: Handle error.</span>
+<span class="p">}</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">ErrorHandler</span> <span class="o">=</span> <span class="n">fluent</span><span class="o">.</span><span class="n">NewFallbackHandler</span><span class="p">(</span><span class="n">fallback</span><span class="p">)</span>
+
+<span class="c">// Fallback json to stdout.</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">ErrorHandler</span> <span class="o">=</span> <span class="n">fluent</span><span class="o">.</span><span class="n">NewFallbackJSONHandler</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">Stdout</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>この機能の特徴として、<code class="language-plaintext highlighter-rouge">HandleError</code> と送信のエラー判定を結合させています。つまり、この関数がエラーを返さなかった場合はメッセージは pending にならずに成功したものとして扱います。逆にいうとエラーを返した場合は同じメッセージが何回も流れて来ます。フォールバックさせる場合には再送周りをコントロールする必要があるので、この方が何かと都合が良かったりするので一旦この形で落ち着いています。</p>
+
+<h2 id="パフォーマンス">パフォーマンス</h2>
+
+<p>というわけで、色々やってきましたが最終的なベンチマークはこんな感じになりました。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cd benchmark &amp;&amp; go test -bench . -benchmem
+enable dummay daemon
+goos: darwin
+goarch: amd64
+pkg: github.com/daichirata/fluent-logger-go/benchmark
+BenchmarkStructDaichirata-4   	  200000	      6027 ns/op	    1474 B/op	       8 allocs/op
+BenchmarkStructOfficial-4     	  100000	     18551 ns/op	    4889 B/op	      35 allocs/op
+BenchmarkMapDaichirata-4      	  200000	      7070 ns/op	     929 B/op	       6 allocs/op
+BenchmarkMapOfficial-4        	  100000	     21664 ns/op	    5930 B/op	      62 allocs/op
+PASS
+ok  	github.com/daichirata/fluent-logger-go/benchmark	7.227s
+</code></pre></div></div>
+
+<p>結構誤差が出るので参考程度ですが、そこそこ良い結果にはなっているのではないでしょうか。ついでに lestrrat さんの奴のもやってみました。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// +build bench</span>
+
+<span class="k">package</span> <span class="n">fluent_test</span>
+
+<span class="k">import</span> <span class="p">(</span>
+	<span class="s">"testing"</span>
+
+	<span class="n">daichirata</span> <span class="s">"github.com/daichirata/fluent-logger-go"</span>
+	<span class="n">official</span> <span class="s">"github.com/fluent/fluent-logger-golang/fluent"</span>
+	<span class="n">k0kubun</span> <span class="s">"github.com/k0kubun/fluent-logger-go"</span>
+	<span class="n">lestrrat</span> <span class="s">"github.com/lestrrat/go-fluent-client"</span>
+<span class="p">)</span>
+
+<span class="k">const</span> <span class="n">tag</span> <span class="o">=</span> <span class="s">"debug.test"</span>
+<span class="k">const</span> <span class="n">postsPerIter</span> <span class="o">=</span> <span class="m">1</span>
+
+<span class="k">func</span> <span class="n">BenchmarkK0kubun</span><span class="p">(</span><span class="n">b</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">B</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">c</span> <span class="o">:=</span> <span class="n">k0kubun</span><span class="o">.</span><span class="n">NewLogger</span><span class="p">(</span><span class="n">k0kubun</span><span class="o">.</span><span class="n">Config</span><span class="p">{})</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">b</span><span class="o">.</span><span class="n">N</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">for</span> <span class="n">j</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">postsPerIter</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span> <span class="p">{</span>
+			<span class="n">c</span><span class="o">.</span><span class="n">Post</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="k">interface</span><span class="p">{}{</span><span class="s">"count"</span><span class="o">:</span> <span class="n">j</span><span class="p">})</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">BenchmarkDaichirata</span><span class="p">(</span><span class="n">b</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">B</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">c</span><span class="p">,</span> <span class="n">_</span> <span class="o">:=</span> <span class="n">daichirata</span><span class="o">.</span><span class="n">NewLogger</span><span class="p">(</span><span class="n">daichirata</span><span class="o">.</span><span class="n">Config</span><span class="p">{})</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">b</span><span class="o">.</span><span class="n">N</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">for</span> <span class="n">j</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">postsPerIter</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span> <span class="p">{</span>
+			<span class="n">c</span><span class="o">.</span><span class="n">Post</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="k">interface</span><span class="p">{}{</span><span class="s">"count"</span><span class="o">:</span> <span class="n">j</span><span class="p">})</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="n">c</span><span class="o">.</span><span class="n">Close</span><span class="p">()</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">BenchmarkLestrrat</span><span class="p">(</span><span class="n">b</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">B</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">c</span><span class="p">,</span> <span class="n">_</span> <span class="o">:=</span> <span class="n">lestrrat</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">b</span><span class="o">.</span><span class="n">N</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">for</span> <span class="n">j</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">postsPerIter</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">Post</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="k">interface</span><span class="p">{}{</span><span class="s">"count"</span><span class="o">:</span> <span class="n">j</span><span class="p">})</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="n">b</span><span class="o">.</span><span class="n">Logf</span><span class="p">(</span><span class="s">"whoa Post failed"</span><span class="p">)</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="n">c</span><span class="o">.</span><span class="n">Shutdown</span><span class="p">(</span><span class="no">nil</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">BenchmarkLestrratUnbuffered</span><span class="p">(</span><span class="n">b</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">B</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">c</span><span class="p">,</span> <span class="n">_</span> <span class="o">:=</span> <span class="n">lestrrat</span><span class="o">.</span><span class="n">New</span><span class="p">(</span><span class="n">lestrrat</span><span class="o">.</span><span class="n">WithBuffered</span><span class="p">(</span><span class="no">false</span><span class="p">))</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">b</span><span class="o">.</span><span class="n">N</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">for</span> <span class="n">j</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">postsPerIter</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">Post</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="k">interface</span><span class="p">{}{</span><span class="s">"count"</span><span class="o">:</span> <span class="n">j</span><span class="p">})</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="n">b</span><span class="o">.</span><span class="n">Logf</span><span class="p">(</span><span class="s">"whoa Post failed"</span><span class="p">)</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="n">c</span><span class="o">.</span><span class="n">Shutdown</span><span class="p">(</span><span class="no">nil</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">BenchmarkOfficial</span><span class="p">(</span><span class="n">b</span> <span class="o">*</span><span class="n">testing</span><span class="o">.</span><span class="n">B</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">c</span><span class="p">,</span> <span class="n">_</span> <span class="o">:=</span> <span class="n">official</span><span class="o">.</span><span class="n">New</span><span class="p">(</span><span class="n">official</span><span class="o">.</span><span class="n">Config</span><span class="p">{})</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">b</span><span class="o">.</span><span class="n">N</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">for</span> <span class="n">j</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">postsPerIter</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">Post</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="k">interface</span><span class="p">{}{</span><span class="s">"count"</span><span class="o">:</span> <span class="n">j</span><span class="p">})</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="n">b</span><span class="o">.</span><span class="n">Logf</span><span class="p">(</span><span class="s">"whoa Post failed"</span><span class="p">)</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="n">c</span><span class="o">.</span><span class="n">Close</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ go test -run=none -bench=. -benchmem -tags bench
+
+goos: darwin
+goarch: amd64
+pkg: github.com/lestrrat/go-fluent-client
+BenchmarkK0kubun-4              	  500000	      3191 ns/op	    1679 B/op	      13 allocs/op
+BenchmarkDaichirata-4           	  500000	      3152 ns/op	     829 B/op	      10 allocs/op
+BenchmarkLestrrat-4             	  500000	      3838 ns/op	     529 B/op	       7 allocs/op
+BenchmarkLestrratUnbuffered-4   	  300000	      8682 ns/op	     512 B/op	       7 allocs/op
+BenchmarkOfficial-4             	  200000	      8893 ns/op	     896 B/op	       9 allocs/op
+PASS
+ok  	github.com/lestrrat/go-fluent-client	10.610s
+</code></pre></div></div>
+
+<p>というわけで、 <code class="language-plaintext highlighter-rouge">github.com/k0kubun/fluent-logger-go</code> と大体同じくらいでしょうか。(ただ、こちらは終了時に buffer を flush することが出来ないっぽいのでちょっと実用的には微妙かなという感じはありますが) それにしても lestrrat さんのやつはエンコーダーとデコーダーを自作してるみたいですし 7 allocs/op 凄いですね。</p>
+
+<h2 id="終わり">終わり</h2>
+
+<p>最近 Go を全然書いていないので久しぶりに触る機会で来て楽しかった。おわり。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[この記事はGo4 Advent Calendar 2017の12/15のエントリです。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">ElasticsearchとGCPのTCP Keepaliveではまった話</title><link href="https://daichi.dev/posts/2016-05-02-gcp-elasticsearch-tcp-keepalive" rel="alternate" type="text/html" title="ElasticsearchとGCPのTCP Keepaliveではまった話" /><published>2016-05-02T00:00:00+09:00</published><updated>2016-05-02T00:00:00+09:00</updated><id>https://daichi.dev/posts/gcp-elasticsearch-tcp-keepalive</id><content type="html" xml:base="https://daichi.dev/posts/2016-05-02-gcp-elasticsearch-tcp-keepalive"><![CDATA[<p>今回はGCP上にElasticsearchクラスタを組もうとしてはまった話をします。ちゃんとドキュメント読めと言われればそこまでなんだけど、ミドルウェアが間に入ってて気づくのに遅れてしまった…。</p>
+
+<h2 id="tldr">TL;DR</h2>
+
+<p>GCEのファイヤーウォールはinactiveコネクションを10分で切断するので、Elasticsearchのクラスタを構築する場合はnet.ipv4.tcp_keepalive_timeの設定を変える必要があるよ。</p>
+
+<h2 id="安定しないクラスタ">安定しないクラスタ</h2>
+
+<p>事の発端はGCEインスタンスで構築していたElasticsearchのクラスタが、一定間隔でノード間の疎通に失敗して切断・再接続を繰り返していました。</p>
+
+<ul>
+  <li>OS: CentOS 7.2</li>
+  <li>Elasticsearch: 2.3.1</li>
+</ul>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[INFO ][discovery.gce              ] [elasticsearch-1] master_left [{elasticsearch-2}{4TPArCtHQMKgWaLod3ZMjA}{10.2.101.5}{10.2.101.5:9300}], reason [failed to ping, tried [3] times, each with  maximum [30s] timeout]
+[WARN ][discovery.gce              ] [elasticsearch-1] master left (reason = failed to ping, tried [3] times, each with  maximum [30s] timeout), current nodes: {{elasticsearch-3}{JtcxuuucRXiClrl6q7qL8A}{10.2.101.5}{10.2.101.5:9300},{elasticsearch-1}{RQvtZKAJTfGmbmWETYY0fw}{10.2.101.4}{elasticsearch-1.c.cyberagent-013.internal/10.2.101.4:9300},}
+[INFO ][cluster.service            ] [elasticsearch-1] removed {{elasticsearch-2}{4TPArCtHQMKgWaLod3ZMjA}{10.2.101.5}{10.2.101.5:9300},}, reason: zen-disco-master_failed ({elasticsearch-2}{4TPArCtHQMKgWaLod3ZMjA}{10.2.101.5}{10.2.101.5:9300})
+[DEBUG][action.admin.cluster.health] [elasticsearch-1] connection exception while trying to forward request with action name [cluster:monitor/health] to master node [{elasticsearch-2}{4TPArCtHQMKgWaLod3ZMjA}{10.2.101.5}{10.2.101.5:9300}], scheduling a retry. Error: [org.elasticsearch.transport.NodeDisconnectedException: [elasticsearch-2][10.2.101.5:9300][cluster:monitor/health] disconnected]
+</code></pre></div></div>
+
+<p>最初はエラーメッセージから、負荷やGCなどでノード間のpingがtime outしているのかと思いその辺の設定を変えて様子を見てみました。</p>
+
+<p><a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-discovery-zen.html">Zen Discovery</a></p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">discovery.zen.fd.ping_timeout</span><span class="pi">:</span> <span class="s">60s</span>
+<span class="na">discovery.zen.fd.ping_retries</span><span class="pi">:</span> <span class="m">6</span>
+</code></pre></div></div>
+
+<p>これで解決すればよかったんですが、設定を変えてみても状況は一向に変わらず、GCなども発生している様子がなかったので本格的に調査します。</p>
+
+<p>Elasticsearchのクラスタ内部のノード間通信には<a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-transport.html">Transport module</a>が使用されていて、Nettyを使って非同期に通信しています。まず初めに、このTransport周りのログをTRACEレベルまで出力するように変更します。</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-XPUT</span> localhost:9200/_cluster/settings <span class="nt">-d</span> <span class="s1">'
+{
+  "transient" : {
+    "logger.transport" : "TRACE",
+    "logger.org.elasticsearch.transport" : "TRACE"
+  }
+}'</span>
+</code></pre></div></div>
+
+<p>その上でログを見てみると、どうもネットワークレイヤでそもそも接続できていない様なログが出力されていました。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[2016-04-27 16:07:43,207][TRACE][transport.netty          ] [elasticsearch-1] close connection exception caught on transport layer [[id: 0xa2b52d5c, /10.2.101.4:40290 =&gt; /10.2.101.5:9300]], disconnecting from relevant node
+java.io.IOException: Connection timed out
+        at sun.nio.ch.FileDispatcherImpl.read0(Native Method)
+        at sun.nio.ch.SocketDispatcher.read(SocketDispatcher.java:39)
+        at sun.nio.ch.IOUtil.readIntoNativeBuffer(IOUtil.java:223)
+        at sun.nio.ch.IOUtil.read(IOUtil.java:192)
+        at sun.nio.ch.SocketChannelImpl.read(SocketChannelImpl.java:380)
+        at org.jboss.netty.channel.socket.nio.NioWorker.read(NioWorker.java:64)
+        at org.jboss.netty.channel.socket.nio.AbstractNioWorker.process(AbstractNioWorker.java:108)
+        at org.jboss.netty.channel.socket.nio.AbstractNioSelector.run(AbstractNioSelector.java:337)
+        at org.jboss.netty.channel.socket.nio.AbstractNioWorker.run(AbstractNioWorker.java:89)
+        at org.jboss.netty.channel.socket.nio.NioWorker.run(NioWorker.java:178)
+        at org.jboss.netty.util.ThreadRenamingRunnable.run(ThreadRenamingRunnable.java:108)
+        at org.jboss.netty.util.internal.DeadLockProofWorker$1.run(DeadLockProofWorker.java:42)
+        at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)
+        at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)
+        at java.lang.Thread.run(Thread.java:745)
+</code></pre></div></div>
+
+<p>後、先程は気づいてなかったんですがtransportで切断されているログも出力されていました。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[INFO][discovery.gce  ] [elasticsearch-1] master_left [{elasticsearch-2}{Xa2Cq98mQie1WcaXFfHraQ}{10.2.101.5}{10.2.101.5:9300}], reason [transport disconnected]
+[WARN][discovery.gce  ] [elasticsearch-1] master left (reason = transport disconnected), current nodes: {{elasticsearch-1}{fjLqVUoxRB6RRNCecJSAaw}{10.2.101.4}{10.2.101.4:9300},}
+[INFO][cluster.service] [elasticsearch-1] removed {{elasticsearch-2}{Xa2Cq98mQie1WcaXFfHraQ}{10.2.101.5}{10.2.101.5:9300},}, reason: zen-disco-master_failed ({elasticsearch-2}{Xa2Cq98mQie1WcaXFfHraQ}{10.2.101.16}{10.2.101.16:9300})
+</code></pre></div></div>
+
+<p>対象のノード間でpingコマンドを実行したまま様子を見てみたんですが、特にネットワークが切れてるようでは無かったのでノード間のtcp接続を確認してみます。</p>
+
+<ul>
+  <li>ノード 1</li>
+</ul>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>netstat <span class="nt">--tcp</span> <span class="nt">-t</span> <span class="nt">-o</span> <span class="nt">-n</span> | <span class="nb">grep </span>9300 | <span class="nb">sort</span> <span class="nt">-k5</span>
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37638        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37637        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37636        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37635        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37634        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37633        ESTABLISHED keepalive <span class="o">(</span>5221.58/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37632        ESTABLISHED keepalive <span class="o">(</span>5172.43/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37631        ESTABLISHED keepalive <span class="o">(</span>5172.43/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37630        ESTABLISHED keepalive <span class="o">(</span>5188.81/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37629        ESTABLISHED keepalive <span class="o">(</span>5188.82/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37628        ESTABLISHED keepalive <span class="o">(</span>5221.58/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37627        ESTABLISHED keepalive <span class="o">(</span>4205.77/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:9300         10.2.101.5:37626        ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42254        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42253        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42252        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42251        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42250        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42249        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42248        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42247        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42246        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42245        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42244        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42243        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+tcp6       0      0 10.2.101.4:42242        10.2.101.5:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span> 
+</code></pre></div></div>
+
+<ul>
+  <li>ノード 2</li>
+</ul>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>netstat <span class="nt">--tcp</span> <span class="nt">-t</span> <span class="nt">-o</span> <span class="nt">-n</span> | <span class="nb">grep </span>9300 | <span class="nb">sort</span> <span class="nt">-k5</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42254        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42253        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42252        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42251        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42250        ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42249        ESTABLISHED keepalive <span class="o">(</span>5221.58/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42248        ESTABLISHED keepalive <span class="o">(</span>5172.43/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42247        ESTABLISHED keepalive <span class="o">(</span>5172.43/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42246        ESTABLISHED keepalive <span class="o">(</span>5188.81/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42245        ESTABLISHED keepalive <span class="o">(</span>5188.82/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42244        ESTABLISHED keepalive <span class="o">(</span>5221.58/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42243        ESTABLISHED keepalive <span class="o">(</span>4205.77/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:9300         10.2.101.4:42242        ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37638        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37637        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37636        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37635        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37634        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37633        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>4107.47/0/1<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37632        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37631        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37630        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37629        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37628        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37627        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+tcp6       0      0 10.2.101.5:37626        10.2.101.4:9300         ESTABLISHED keepalive <span class="o">(</span>5319.89/0/0<span class="o">)</span>
+</code></pre></div></div>
+
+<p>これを見てみると、Elasticsearchはノード間で互いに13本のコネクションを作成していることがわかります。このままwatchコマンドで定期的に監視していると、どうやら一部のコネクションでTCP Keepaliveのprobe packetのやり取りに失敗していて、それが原因でノード間のコネクションがクローズされている事がわかりました。</p>
+
+<p>そもそもTCP Keepaliveのprobe packetは無通信だった場合にのみ送信されるはずだし、一部のコネクションのみやり取りに失敗している原因が良くわかりません。とりあえずカーネルのデフォルト設定だとprobe packetを送り始めるのが2時間後で確認が非常に辛いので、カーネルパラメータを変更して間隔を短くしてみます。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>sysctl <span class="nt">-w</span> <span class="se">\</span>
+net.ipv4.tcp_keepalive_time<span class="o">=</span>100 <span class="se">\</span>
+net.ipv4.tcp_keepalive_intvl<span class="o">=</span>60 <span class="se">\</span>
+net.ipv4.tcp_keepalive_probes<span class="o">=</span>3
+</code></pre></div></div>
+
+<p>その状態で様子を見てみると、なんと今度は問題が発生せずElasticsearchのクラスタも安定して動作するようになりました。GCEのネットワーク仕様的に切断されていそうな挙動だったので調べて見ると、しっかりドキュメントに書かれてました。がーん。</p>
+
+<h2 id="networks-and-firewalls">Networks and Firewalls</h2>
+
+<p><a href="https://cloud.google.com/compute/docs/networking#networks">Using Networks and Firewalls - Compute Engine — Google Cloud Platform</a><br />
+<a href="https://cloud.google.com/compute/docs/troubleshooting">Tips, Troubleshooting, &amp; Known Issues - Compute Engine — Google Cloud Platform</a></p>
+
+<p>GCEのネットワークはインスタンス間の通信であっても、L2ではなく必ずゲートウェイを経由するL3で通信します。そして各インスタンスに対して許可するINBOUNDトラフィックをファイヤーウォールで管理、設定していて、このファイヤーウォールがinactiveなTCPコネクションを10分で切断します。なので、コネクションを維持したい場合は下記設定が推奨されています。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo /sbin/sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=60 net.ipv4.tcp_keepalive_probes=5
+</code></pre></div></div>
+
+<p>ソース読んでないので適当ですが、多分Elasticsearchはノード間で13本コネクションを作成した後コネクションをプールしていて、使われないコネクションが幾つか存在するのかもしれません。そのコネクションがファイアーウォールに切断され、TCP Keepaliveで検知されるタイミングでノード間の接続が切れたとElasticsearchが検知して、クラスタから切断されるっていうのが今回の内容でした。</p>
+
+<h2 id="おわり">おわり</h2>
+
+<p>最初はElasticsearch側の問題だと思っていろいろ設定をみたり、GithubのIssueとかを漁っていて結構気づくのに時間がかかってしまいました。最近はGCPでシステムを構成することも大分多くなってきたと思いますが、他のシステムでも似たような事がおきる可能性は十分にあると思うので、頭の片隅にとどめておいたほうが良さそうです。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[今回はGCP上にElasticsearchクラスタを組もうとしてはまった話をします。ちゃんとドキュメント読めと言われればそこまでなんだけど、ミドルウェアが間に入ってて気づくのに遅れてしまった…。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">HTTP/2でXMLHttpRequest Level2</title><link href="https://daichi.dev/posts/2016-02-25-http2-xhr" rel="alternate" type="text/html" title="HTTP/2でXMLHttpRequest Level2" /><published>2016-02-25T00:00:00+09:00</published><updated>2016-02-25T00:00:00+09:00</updated><id>https://daichi.dev/posts/http2-xhr</id><content type="html" xml:base="https://daichi.dev/posts/2016-02-25-http2-xhr"><![CDATA[<p>モバイルなどのブラウザからサーバーに何らかのデータを定期的に送信したい場合、出来るだけパケットやコネクション数を減らしたい。今であればHTTP/2を使うのが最も適していると思うのだけど、Javascriptから送信するのでXHRでリクエストを投げることになる。imageやcssなどのリソースは当然HTTP/2でリクエストされると思うけど、HTTP/1.1でアクセスしたページからXHRでリクエストを投げた場合や、CORSなリクエストに対しての通信の場合にもちゃんとHTTP/2でアクセスされているかを確認するため、以下の2パターンを実際に動かしてみる。</p>
+
+<ul>
+  <li>HTTP -&gt; HTTP/2</li>
+  <li>HTTP -&gt; (CORS) HTTP/2</li>
+</ul>
+
+<h2 id="setup">Setup</h2>
+
+<p>まず初めに、HTTP/2に対応している<a href="https://h2o.examp1e.net/">H2O</a>をDockerを使って構築する。</p>
+
+<p>ファイル一式を<a href="https://github.com/daichirata/http2_xhr">daichirata/htt2_xhr</a>に置いているので、
+docker-machineを使っていてipが192.168.99.100であればそのまま使えると思う。</p>
+
+<ul>
+  <li>Dockerfile</li>
+</ul>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM buildpack-deps
+
+RUN apt-get update <span class="o">&amp;&amp;</span> <span class="se">\</span>
+    apt-get <span class="nb">install</span> <span class="nt">-y</span> cmake <span class="o">&amp;&amp;</span> <span class="se">\</span>
+    <span class="nb">rm</span> <span class="nt">-rf</span> /var/lib/apt/lists/<span class="k">*</span>
+
+RUN git clone <span class="nt">--recursive</span> https://github.com/h2o/h2o <span class="nt">--depth</span> 1 <span class="o">&amp;&amp;</span> <span class="se">\</span>
+    <span class="nb">cd </span>h2o <span class="o">&amp;&amp;</span> <span class="se">\</span>
+    cmake <span class="nb">.</span> <span class="o">&amp;&amp;</span> <span class="se">\</span>
+    make h2o
+
+WORKDIR /h2o
+CMD ./h2o <span class="nt">-c</span> /h2o_conf/h2o.conf
+</code></pre></div></div>
+
+<ul>
+  <li>h2o.conf</li>
+</ul>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">access-log</span><span class="pi">:</span> <span class="s">/dev/stdout</span>
+
+<span class="na">listen</span><span class="pi">:</span>
+  <span class="na">port</span><span class="pi">:</span> <span class="m">80</span>
+<span class="na">listen</span><span class="pi">:</span>
+  <span class="na">port</span><span class="pi">:</span> <span class="m">443</span>
+  <span class="na">ssl</span><span class="pi">:</span>
+    <span class="na">certificate-file</span><span class="pi">:</span> <span class="s">/h2o_conf/server.crt</span>
+    <span class="na">key-file</span><span class="pi">:</span> <span class="s">/h2o_conf/server.key</span>
+<span class="na">hosts</span><span class="pi">:</span>
+  <span class="s2">"</span><span class="s">*:80"</span><span class="err">:</span>
+    <span class="na">paths</span><span class="pi">:</span>
+      <span class="na">/</span><span class="pi">:</span>
+        <span class="na">file.dir</span><span class="pi">:</span> <span class="s">/h2o_conf/doc_root</span>
+  <span class="s2">"</span><span class="s">*:443"</span><span class="err">:</span>
+    <span class="na">header.add</span><span class="pi">:</span> <span class="s2">"</span><span class="s">Access-Control-Allow-Origin:</span><span class="nv"> </span><span class="s">*"</span>
+    <span class="na">paths</span><span class="pi">:</span>
+      <span class="na">/</span><span class="pi">:</span>
+        <span class="na">file.dir</span><span class="pi">:</span> <span class="s">/h2o_conf/doc_root</span>
+</code></pre></div></div>
+
+<p>証明書にはオレオレ証明書を使うが、XHRが失敗するのでFQDNの所はちゃんとした値を入れる。
+今回はdocker-machineとxip.ioを使うので<code class="language-plaintext highlighter-rouge">https://192.168.99.100.xip.io</code>に対しての証明書を発行する。</p>
+
+<p>生成されたRoot証明書をテストのためにkeychainに登録する。終わったらちゃんと削除すること。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>openssl genrsa 2048 <span class="o">&gt;</span> server.key
+<span class="nv">$ </span>openssl req <span class="nt">-new</span> <span class="nt">-key</span> server.key <span class="o">&gt;</span> server.csr
+<span class="nv">$ </span>openssl x509 <span class="nt">-days</span> 3650 <span class="nt">-req</span> <span class="nt">-signkey</span> server.key &lt; server.csr <span class="o">&gt;</span> server.crt
+</code></pre></div></div>
+
+<p>ブラウザからはトップページに対してGETパラメーター付きでリクエストを送信する</p>
+
+<ul>
+  <li>main.js</li>
+</ul>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">document</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="dl">'</span><span class="s1">DOMContentLoaded</span><span class="dl">'</span><span class="p">,</span> <span class="kd">function</span><span class="p">(){</span>
+  <span class="kd">var</span> <span class="nx">xhr</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">XMLHttpRequest</span><span class="p">();</span>
+  <span class="nx">xhr</span><span class="p">.</span><span class="nx">open</span><span class="p">(</span><span class="dl">'</span><span class="s1">get</span><span class="dl">'</span><span class="p">,</span> <span class="dl">'</span><span class="s1">https://192.168.99.100.xip.io/?hoge=fuga</span><span class="dl">'</span><span class="p">);</span>
+  <span class="nx">xhr</span><span class="p">.</span><span class="nx">send</span><span class="p">();</span>
+<span class="p">},</span> <span class="kc">false</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h2 id="xhr-on-http2">XHR on HTTP/2</h2>
+
+<p>XHRがHTTP/2で通信しているかどうかを確認するには、ChromeのDeveloper Consoleを使うかh2oのアクセスログを見ればいい。Developer ConsoleのNetworkのタブにProtocolが表示されていない場合は、NameとかMethodの上で右クリックすると表示できる。</p>
+
+<h3 id="http---http2">HTTP -&gt; HTTP/2</h3>
+
+<p><img src="/assets/images/posts/2016-02-25-http2-xhr/http_xhr_http2.png" alt="" /></p>
+
+<p>同一ドメインに対してHTTP -&gt; HTTP/2のXHR。特に問題なくh2でリクエストが飛んでいる事が分かる。</p>
+
+<h3 id="http---cors-http2">HTTP -&gt; CORS HTTP/2</h3>
+
+<p><img src="/assets/images/posts/2016-02-25-http2-xhr/http_xhr_cors_http2.png" alt="" /></p>
+
+<p>別ドメイン(192.168.99.100 -&gt; 192.168.99.100.xip.io)に対してのHTTP -&gt; HTTP/2のXHR。こちらも問題なくh2でリクエストが飛んでいる。</p>
+
+<h2 id="websocket-vs-http2">WebSocket vs HTTP/2</h2>
+
+<p>パケットやコネクション数を減らしたいモチベーションであれば、WebSocketでも同様の事が出来そうに思える。だけど今回のケースでは以下の点でWebSocketはマッチしない様に思う。</p>
+
+<h3 id="1-websocketを解釈できるアプリケーションサーバーを書かなければいけない">1. WebSocketを解釈できるアプリケーションサーバーを書かなければいけない</h3>
+
+<p>何らかのデータを送信するだけでレスポンスを受け取る必要がない場合、フロントのAPIサーバーではリクエストのバリデーションとDB・Fluentd・ファイルのいずれかに出力する位の実装にしておいて、集計や分析にはバックエンドの別のミドルウェアを使う事になると思う。WebSocketはあくまでもサーバー側でイベントが発生したり、クライアントにデータをPushする様なアプリにこそ向いているので、今回の件ではオーバースペックに思う。また、既存のHTTPのセマンティクスに乗っかっておくほうが負荷分散や運用上の資産の流用等の点でアドバンテージがあるだろう。</p>
+
+<h3 id="2-モバイルの場合平文のwebsocketが通らないことがある">2. モバイルの場合、平文のWebSocketが通らないことがある</h3>
+
+<p>HTTP/2のh2c(平文のHTTP/2)も同じ事が言えるが、httpでWebSocketのネゴシエーションを行う場合、初めにクライアントとサーバー間でHTTP/1.1のUpgradeヘッダーのやり取りが必要になる。モバイルには<a href="http://www.opera.com/ja/mobile/max/android">OperaMax</a>のような帯域の節約の為プロキシを挟んで通信している事があり、そのプロキシがUpgradeヘッダーを強制的に書き換えてしまう為ネゴシエーションに失敗することがある。勿論TLSで通信すれば問題ないけど、そうなってしまうと1で上げた点からもHTTP/2を使うほうが良いように思う。</p>
+
+<h2 id="websocket不要説">WebSocket不要説?</h2>
+
+<p>余談ではあるが、HTTP/2があればWebSocketはいらない子なのか、というと決してそういうわけではない。HTTP/2はWebSocketを置き換えるために生まれたわけではなく、Webを早く、軽くする為に生まれたSPDYを標準化させたプロトコルだ。あくまでもHTTP/1.1ベースのプロトコルなのでServerPush APIはHTTP/1.1ベースのアプリケーションから使用するには難しい部分がある。</p>
+
+<p>一方、WebSocketはリアルタイムWebを実現する為にAjax・Cometを経て生まれてきたという背景がある。強力な双方向通信を持っていて、先程も上げたようにサーバー側でイベントが発生するような場合、他のクライアントのイベントを通知する必要がある場合、リアルタイム性を求められる場合のアプリケーションを低レイテンシーで実現する為のプロトコルなのである。</p>
+
+<h2 id="http2便利">HTTP/2便利</h2>
+
+<p>というわけで、HTTP/2最大の長所といっていいかもしれない既存のリソース変更なしに透過的にHTTP/2を適用することが出来た。そしてそれは勿論XHRでも適用されていることが確認できた。実際に業務とかで使うことはまだそんなに無いのであまり実感していなかったけど、やっぱりこれは凄い事だなー。ただ、逆に言うとサーバー・ブラウザ対応含めここまでやらないとこの時代に新しいプロトコルを広めていくっていうのは難しいという事なんだろう。HTTP/2が使えないクライアントであればこれまで通りのHTTP/1.1にフォールバックするので、そろそろ実際の案件に適用してみたい今日この頃。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[モバイルなどのブラウザからサーバーに何らかのデータを定期的に送信したい場合、出来るだけパケットやコネクション数を減らしたい。今であればHTTP/2を使うのが最も適していると思うのだけど、Javascriptから送信するのでXHRでリクエストを投げることになる。imageやcssなどのリソースは当然HTTP/2でリクエストされると思うけど、HTTP/1.1でアクセスしたページからXHRでリクエストを投げた場合や、CORSなリクエストに対しての通信の場合にもちゃんとHTTP/2でアクセスされているかを確認するため、以下の2パターンを実際に動かしてみる。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/posts/2016-02-25-http2-xhr/http_xhr_http2.png" /><media:content medium="image" url="https://daichi.dev/assets/images/posts/2016-02-25-http2-xhr/http_xhr_http2.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">Kafka Consumer 0.9 の挙動</title><link href="https://daichi.dev/posts/2016-02-15-kafka-consumer-0.9" rel="alternate" type="text/html" title="Kafka Consumer 0.9 の挙動" /><published>2016-02-15T00:00:00+09:00</published><updated>2016-02-15T00:00:00+09:00</updated><id>https://daichi.dev/posts/kafka-consumer-0.9</id><content type="html" xml:base="https://daichi.dev/posts/2016-02-15-kafka-consumer-0.9"><![CDATA[<p>Apache Kafka 0.9.0より新しいConsumer実装が追加されました。Broker側の実装自体はv0.8.2で既に追加されていましたが、公式実装として<code class="language-plaintext highlighter-rouge">org.apache.kafka.clients.consumer.KafkaConsumer</code>が同梱されるようになりました。</p>
+
+<p>新しいAPIを用いたConsumerはOffsetの管理とConsumerGroupに紐づくConsumerの管理をBroker側で行ってくれるようになります。詳細に関しては<a href="https://cwiki.apache.org/confluence/display/KAFKA/Consumer+Client+Re-Design">Kafkaのwiki</a>に詳しくまとめられています。が、更新されていない資料が多く実際のフローと異なっている所が多いので、実装ベースで現在のConsumerのフローについて確認していきます。</p>
+
+<p><img src="/assets/images/posts/2016-02-15-kafka-consumer-0.9/diagram.png" alt="" /></p>
+
+<h2 id="起動時の処理">起動時の処理</h2>
+
+<h3 id="1-brokerのクラスタのいずれか1つのサーバーへ接続を試みる">1. Brokerのクラスタの、いずれか1つのサーバーへ接続を試みる。</h3>
+
+<p>起動時に渡されたBrokerの接続先の中から、ランダムに1つのサーバーを選んで接続を試みる。この段階ではどのBrokerに接続しても構わない。</p>
+
+<h4 id="11-接続を確立できた場合">1.1. 接続を確立できた場合</h4>
+
+<p>トピックのメタデータを取得するリクエストを投げる。</p>
+
+<p><a href="https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-TopicMetadataRequest">Topic Metadata Request</a></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>TopicMetadataRequest =&gt; [TopicName]
+  TopicName =&gt; string
+</code></pre></div></div>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>TopicMetadataResponse =&gt; [Broker][TopicMetadata]
+  Broker =&gt; NodeId Host Port  (any number of brokers may be returned)
+    NodeId =&gt; int32
+    Host =&gt; string
+    Port =&gt; int32
+  TopicMetadata =&gt; TopicErrorCode TopicName [PartitionMetadata]
+    TopicErrorCode =&gt; int16
+  PartitionMetadata =&gt; PartitionErrorCode PartitionId Leader Replicas Isr
+    PartitionErrorCode =&gt; int16
+    PartitionId =&gt; int32
+    Leader =&gt; int32
+    Replicas =&gt; [int32]
+    Isr =&gt; [int32]
+</code></pre></div></div>
+
+<p>このAPIでは主に、以下の情報を返す。</p>
+
+<ul>
+  <li>Requestで指定したTopicは存在するか</li>
+  <li>TopicにはどれくらいのPartitionが存在するのか</li>
+  <li>TopicのPartitionのリーダーはどのBrokerか</li>
+  <li>BrokerのHostとPort</li>
+</ul>
+
+<p>Topicの指定がなければクラスタ上に存在する全てのTopic情報を返す。ここで取得した情報を保持しておき、以降のPartitionへの接続や各ConsumerのPartitoinの割当の計算で使用する。</p>
+
+<h4 id="12-接続できなかった場合">1.2. 接続できなかった場合</h4>
+
+<p>起動時に渡されたBrokerの接続先の中から、別のBrokerへ接続を試みる。</p>
+
+<h4 id="13-全てのbrokerに接続できなかった場合">1.3. 全てのBrokerに接続できなかった場合</h4>
+
+<p>1から処理を繰り返すか、そのまま終了する。</p>
+
+<h3 id="2-consumergroupのcoordinatorを取得する">2. ConsumerGroupのCoordinatorを取得する</h3>
+
+<p>ConsumerGroupのOffsetとMemberを管理する特定のBrokerを、KafkaではCoordinatorと呼ぶ。以降、OffsetのFetchとCommitはこのBrokerに対して行う。</p>
+
+<p><a href="https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-GroupCoordinatorRequest">Group Coordinator Request</a></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>GroupCoordinatorRequest =&gt; GroupId
+  GroupId =&gt; string
+</code></pre></div></div>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>GroupCoordinatorResponse =&gt; ErrorCode CoordinatorId CoordinatorHost CoordinatorPort
+  ErrorCode =&gt; int16
+  CoordinatorId =&gt; int32
+  CoordinatorHost =&gt; string
+  CoordinatorPort =&gt; int32
+</code></pre></div></div>
+
+<p>取得したCoordinatorが現在接続しているBrokerと異なる場合、Coordinatorに対して接続を試みる。</p>
+
+<h3 id="3-coordinatorに対して自身をconsumerとして登録する">3. Coordinatorに対して、自身をConsumerとして登録する</h3>
+
+<p><a href="https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-JoinGroupRequest">Join Group Request</a></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>JoinGroupRequest =&gt; GroupId SessionTimeout MemberId ProtocolType GroupProtocols
+  GroupId =&gt; string
+  SessionTimeout =&gt; int32
+  MemberId =&gt; string
+  ProtocolType =&gt; string
+  GroupProtocols =&gt; [ProtocolName ProtocolMetadata]
+    ProtocolName =&gt; string
+    ProtocolMetadata =&gt; bytes
+</code></pre></div></div>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>JoinGroupResponse =&gt; ErrorCode GenerationId GroupProtocol LeaderId MemberId Members
+  ErrorCode =&gt; int16
+  GenerationId =&gt; int32
+  GroupProtocol =&gt; string
+  LeaderId =&gt; string
+  MemberId =&gt; string
+  Members =&gt; [MemberId MemberMetadata]
+    MemberId =&gt; string
+    MemberMetadata =&gt; bytes
+</code></pre></div></div>
+
+<p>MemberIdは、初回接続時には空で構わない。その場合はResponseで新しくMemberIdが生成される。この生成されたIdをRebalance等でConsumerが再接続する際に指定する。</p>
+
+<p>GenerationIdは、新しいConsumerがJoinしてきた等でRebalanceが発生する毎に新しく採番される。Coordinatorは現在のGenerationIdと、そのIDが発行されているConsumer数を管理していて、そのIDに紐づく全てのConsumerがRequestを投げてくるまでResponseをブロックする。
+そうすることで、次のAPIでPartitionの割当を行う際に有効なConsumerを確定させ、ResponseのMembersでその情報を返す。</p>
+
+<p>初めてConsumerGroupに対してJoinしてきたConsumerをリーダーとして設定する。Partitionの割当はリーダーだけがこの後のSyncGroup APIで行う。</p>
+
+<h3 id="4-consumergroup全体のpartitionの割当情報を同期する">4. ConsumerGroup全体のPartitionの割当情報を同期する</h3>
+
+<p><a href="https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-SyncGroupRequest">SyncGroup Request</a></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>SyncGroupRequest =&gt; GroupId GenerationId MemberId GroupAssignment
+  GroupId =&gt; string
+  GenerationId =&gt; int32
+  MemberId =&gt; string
+  GroupAssignment =&gt; [MemberId MemberAssignment]
+    MemberId =&gt; string
+    MemberAssignment =&gt; bytes
+</code></pre></div></div>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>SyncGroupResponse =&gt; ErrorCode MemberAssignment
+  ErrorCode =&gt; int16
+  MemberAssignment =&gt; bytes
+</code></pre></div></div>
+
+<p>このAPIは、リーダーかそうでないかで目的が異なる。</p>
+
+<ul>
+  <li>リーダーの場合 -&gt; Partitionの割当を行う。
+    <ul>
+      <li>TopicMetadataで取得したTopic/Partitionの情報と、JoinGroupで取得したメンバーの情報を元にPartitionの割当を行いGroupAssignmentに指定してRequestを投げる。</li>
+    </ul>
+  </li>
+  <li>その他の場合 -&gt; Partitionの割当を取得する。
+    <ul>
+      <li>リーダーがRequestを投げてくるまでResponseがブロックされる。</li>
+    </ul>
+  </li>
+</ul>
+
+<p>これらの情報は先ほどのJoinGroupで発行されたGenerationIdで世代管理されており、Rebalanceが発生した場合には新規に生成と割当を行う必要がある。</p>
+
+<p>Partitionの割当戦略に関してはライブラリの実装方法による。Broker側に割当戦略を移行する予定ではあるみたいだが、今のところ実装はされていない。(多分)</p>
+
+<h3 id="5-coordinatorに対して一定間隔でheartbeatを投げる">5. Coordinatorに対して、一定間隔でHeartbeatを投げる</h3>
+
+<p><a href="https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-HeartbeatRequest">Heartbeat Request</a></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>HeartbeatRequest =&gt; GroupId GenerationId MemberId
+  GroupId =&gt; string
+  GenerationId =&gt; int32
+  MemberId =&gt; string
+</code></pre></div></div>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>HeartbeatResponse =&gt; ErrorCode
+  ErrorCode =&gt; int16
+</code></pre></div></div>
+
+<p>設定で指定している時間にheartbeatのRequestが無ければ、そのConsumerはkickの扱いになる。
+誰かがkickされた後、その他のConsumerのheartbeatでREBALANCE_IN_PROGRESSのエラーが返り、それを契機にRebalanceの処理が実行される。</p>
+
+<h3 id="6-担当するpartitionのoffsetを取得する">6. 担当するPartitionのOffsetを取得する</h3>
+
+<p><a href="https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-OffsetFetchRequest">Offset Fetch Request</a></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>OffsetFetchRequest =&gt; ConsumerGroup [TopicName [Partition]]
+  ConsumerGroup =&gt; string
+  TopicName =&gt; string
+  Partition =&gt; int32
+</code></pre></div></div>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>OffsetFetchResponse =&gt; [TopicName [Partition Offset Metadata ErrorCode]]
+  TopicName =&gt; string
+  Partition =&gt; int32
+  Offset =&gt; int64
+  Metadata =&gt; string
+  ErrorCode =&gt; int16
+</code></pre></div></div>
+
+<h3 id="7-offset情報を元にメッセージを取得する">7. Offset情報を元にメッセージを取得する</h3>
+
+<p><a href="https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-FetchRequest">Fetch Request</a></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FetchRequest =&gt; ReplicaId MaxWaitTime MinBytes [TopicName [Partition FetchOffset MaxBytes]]
+  ReplicaId =&gt; int32
+  MaxWaitTime =&gt; int32
+  MinBytes =&gt; int32
+  TopicName =&gt; string
+  Partition =&gt; int32
+  FetchOffset =&gt; int64
+  MaxBytes =&gt; int32
+</code></pre></div></div>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FetchResponse =&gt; [TopicName [Partition ErrorCode HighwaterMarkOffset MessageSetSize MessageSet]]
+  TopicName =&gt; string
+  Partition =&gt; int32
+  ErrorCode =&gt; int16
+  HighwaterMarkOffset =&gt; int64
+  MessageSetSize =&gt; int32
+</code></pre></div></div>
+
+<h2 id="おわり">おわり</h2>
+
+<p>まだまだ各言語のライブラリの対応状況がマチマチなので簡単には使えない状態です。只、これまでのConsumerはそれぞれの言語でJavaクライアントに沿って、Zookeeperに同じような構造でデータを保存して、挙動を合わせるみたいな流れだったので、ある程度Broker側に処理が移行するのはJava以外のConsumerクライアントを書いている側からすると大分書きやすくなりそうです。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[Apache Kafka 0.9.0より新しいConsumer実装が追加されました。Broker側の実装自体はv0.8.2で既に追加されていましたが、公式実装としてorg.apache.kafka.clients.consumer.KafkaConsumerが同梱されるようになりました。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/posts/2016-02-15-kafka-consumer-0.9/diagram.png" /><media:content medium="image" url="https://daichi.dev/assets/images/posts/2016-02-15-kafka-consumer-0.9/diagram.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">Rails Engineを使ってAPIと管理画面を分離する</title><link href="https://daichi.dev/posts/2015-12-18-rails-engine" rel="alternate" type="text/html" title="Rails Engineを使ってAPIと管理画面を分離する" /><published>2015-12-18T00:00:00+09:00</published><updated>2015-12-18T00:00:00+09:00</updated><id>https://daichi.dev/posts/rails-engine</id><content type="html" xml:base="https://daichi.dev/posts/2015-12-18-rails-engine"><![CDATA[<p>この記事は <a href="http://qiita.com/advent-calendar/2015/rails">Ruby on Rails Advent Calendar 2015</a> 15日目の記事です。</p>
+
+<p>これまで携わってきたソーシャルゲームのサーバーサイド開発では、1タイトルに対して主に3つの機能を作成することが多かった。</p>
+
+<ul>
+  <li>API
+    <ul>
+      <li>スマートフォンのネイティブアプリケーションから呼ばれるJSON(あるいはJSONフォーマット互換)API</li>
+    </ul>
+  </li>
+  <li>管理用画面
+    <ul>
+      <li>ユーザー情報管理、その他各種制御処理を行う(BANとか補填とかマスタデータキャッシュ管理とか)。エンジニアとカスタマーサポートチームが使用する</li>
+    </ul>
+  </li>
+  <li>デバッグ用画面
+    <ul>
+      <li>開発用のWebUI、単純なAPIを呼ぶフォームではなく「カードのレベルをMAXにするボタン」みたいなものが機能ごとに沢山ある</li>
+    </ul>
+  </li>
+</ul>
+
+<p>開発を行う場合、大体はAPI用の機能がメインになる。ただ、デバック用画面に関しては完全に社内開発用なので適当で構わないけど、管理用画面に関してはそれなりの作りこみが必要になる。基本的には普通のWebアプリケーション開発と変わらない。<a href="https://github.com/drapergem/draper">Draper</a>等のデコレーターを導入したりページネーションを導入したりassetsが結構あったりする。モデルもAPIとは別に存在していて、ユーザーのデータを変更することになるので証跡管理用テーブルや、マスタデータの更新管理用テーブルなどがある。それらを、APIサーバーをメインに書かれているRailsアプリケーションに追加して行くことになる。</p>
+
+<p>ページネーションやデコレーター系のgemは全体に影響するので、API用のモデルが何故か<code class="language-plaintext highlighter-rouge">#decorate</code>メソッドを持っていたり、app以下にdacoratorsディレクトリがあったり、assetsをAPIサーバーでは配信しないように設定を変えたりするのを何とかしたいと思っていた。</p>
+
+<p>単純に、別のRailsアプリケーションとして実装すればいいじゃんっていう話もあるんだけど、結局はAPIも管理用画面も同じユーザーのデータを扱う事になるので管理用画面のアプリケーションからはAPIのモデルを扱う必要がある。なのでRails Engineを使用してアプリケーションを分離してみたのが今回の話。</p>
+
+<h2 id="rails-engine">Rails Engine</h2>
+
+<p>Rails Engineの使い方は<a href="http://railsguides.jp/engines.html">RailsGuides(日本語訳)</a>を見ると使い方は大体わかると思う。</p>
+
+<p>これを例えば今回はadminという名前で定義してみる。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>bin/rails plugin new admin <span class="nt">--mountable</span>
+</code></pre></div></div>
+
+<p>で、mount可能なエンジンとして定義する。</p>
+
+<p>後は、GemfileでEngineを読み込んでroutes.rbでmountする。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Gemfile</span>
+
+<span class="n">gem</span> <span class="s1">'admin'</span><span class="p">,</span> <span class="ss">path: </span><span class="s2">"admin"</span>
+</code></pre></div></div>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># config/routes.rb</span>
+
+<span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">routes</span><span class="p">.</span><span class="nf">draw</span> <span class="k">do</span>
+  <span class="n">mount</span> <span class="no">Admin</span><span class="o">::</span><span class="no">Engine</span> <span class="o">=&gt;</span> <span class="s2">"/admin"</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>基本の形はこんな感じ。Engineの中にもbin/railsファイルがあるので、それを使ってファイルをgenerateしながら管理用画面を開発する。デコレーターやassets関連も全部Engine以下に入れる。</p>
+
+<p>そのままでもある程度整理されるので良いんだけど、APIサーバーではそもそもEngineを読み込まない様にする事で完全に分離させる。</p>
+
+<p>先ず、適当に定義したgroup内に移動させる。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Gemfile</span>
+
+<span class="n">group</span> <span class="ss">:admin</span> <span class="k">do</span>
+  <span class="n">gem</span> <span class="s1">'admin'</span><span class="p">,</span> <span class="ss">path: </span><span class="s2">"admin"</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>次に環境変数で指定されていた場合のみ、Engineのgroupをrequireするようにする。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># config/application.rb</span>
+
+<span class="c1"># Require the gems listed in Gemfile, including any gems</span>
+<span class="c1"># you've limited to :test, :development, or :production.</span>
+<span class="c1"># Bundler.require(*Rails.groups)</span>
+
+<span class="n">groups</span> <span class="o">=</span> <span class="no">Rails</span><span class="p">.</span><span class="nf">groups</span>
+<span class="n">groups</span> <span class="o">&lt;&lt;</span> <span class="ss">:admin</span> <span class="k">if</span> <span class="no">ENV</span><span class="p">[</span><span class="s1">'SERVER_TYPE_ADMIN'</span><span class="p">]</span>
+<span class="no">Bundler</span><span class="p">.</span><span class="nf">require</span><span class="p">(</span><span class="o">*</span><span class="n">groups</span><span class="p">)</span>
+</code></pre></div></div>
+<p>後はAdmin::Engineが定義されている場合のみmountを行う。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># config/routes.rb</span>
+
+<span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">routes</span><span class="p">.</span><span class="nf">draw</span> <span class="k">do</span>
+  <span class="k">if</span> <span class="k">defined?</span><span class="p">(</span><span class="no">Admin</span><span class="o">::</span><span class="no">Engine</span><span class="p">)</span>
+    <span class="n">mount</span> <span class="no">Admin</span><span class="o">::</span><span class="no">Engine</span><span class="p">,</span> <span class="ss">at: :admin</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>こうすることで、Engineを読み込まないAPIサーバー側でview用のgemがロードされたり、管理用画面にアクセスされることは無い。assets:precompileなどを行ってもそもそもEngineが読み込まれていないので、デプロイなんかも共通のフローでいけるはず。</p>
+
+<h2 id="database">Database</h2>
+
+<p>Rails Engineのmigrationは普通は親となるアプリケーションのmigrationにコピーすることになる。が、API側のアプリケーションは<a href="https://github.com/tchandy/octopus">tchandy/octopus</a>を使ってshardingしていたのでちょっと厳しい。更に、管理系のDBなのでAPI側のアプリケーションと同一のDBに入れることは基本的には無いだろう。</p>
+
+<p>今回はちょっと無理やり、DBの接続設定やmigrationも含めてEngine内で全て完結させることにする。まず初めに、DB接続用のabstract classを作成する。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">module</span> <span class="nn">Admin</span>
+  <span class="k">class</span> <span class="nc">Base</span> <span class="o">&lt;</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span>
+    <span class="nb">self</span><span class="p">.</span><span class="nf">abstract_class</span> <span class="o">=</span> <span class="kp">true</span>
+
+    <span class="n">databases</span> <span class="o">=</span> <span class="no">YAML</span><span class="p">.</span><span class="nf">load_file</span><span class="p">(</span><span class="no">Engine</span><span class="p">.</span><span class="nf">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'config/database.yml'</span><span class="p">))</span>
+    <span class="n">octopus_establish_connection</span> <span class="n">databases</span><span class="p">[</span><span class="no">Rails</span><span class="p">.</span><span class="nf">env</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nc">self</span><span class="o">.</span><span class="nf">inherited</span><span class="p">(</span><span class="n">child</span><span class="p">)</span>
+      <span class="n">child</span><span class="p">.</span><span class="nf">custom_octopus_connection</span> <span class="o">=</span> <span class="kp">true</span>
+      <span class="k">super</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>Engine内で追加するモデルは全てこのクラスを継承させてあげる事で、Engine内のconfigを元にしたDBに接続するようになる。</p>
+
+<p>migrationファイルも親にコピーさせずにEngine内で実行できるようにEngine内にrake taskを定義する。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># admin/lib/tasks/admin_tasks.rake</span>
+
+<span class="n">namespace</span> <span class="ss">:admin</span> <span class="k">do</span>
+  <span class="n">task</span> <span class="ss">:set_custom_db_config_paths</span> <span class="k">do</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="no">Admin</span><span class="o">::</span><span class="no">Engine</span><span class="p">.</span><span class="nf">root</span>
+
+    <span class="no">ENV</span><span class="p">[</span><span class="s1">'SCHEMA'</span><span class="p">]</span>       <span class="o">=</span> <span class="n">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'db/schema.rb'</span><span class="p">).</span><span class="nf">to_s</span>
+    <span class="no">ENV</span><span class="p">[</span><span class="s1">'DB_STRUCTURE'</span><span class="p">]</span> <span class="o">=</span> <span class="n">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'db/structure.sql'</span><span class="p">).</span><span class="nf">to_s</span>
+
+    <span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">paths</span><span class="p">[</span><span class="s1">'db/migrate'</span><span class="p">]</span>      <span class="o">=</span> <span class="p">[</span><span class="n">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'db/migrate'</span><span class="p">).</span><span class="nf">to_s</span><span class="p">]</span>
+    <span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">paths</span><span class="p">[</span><span class="s1">'db/seeds'</span><span class="p">]</span>        <span class="o">=</span> <span class="p">[</span><span class="n">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'db/seeds'</span><span class="p">).</span><span class="nf">to_s</span><span class="p">]</span>
+    <span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">paths</span><span class="p">[</span><span class="s1">'config/database'</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'config/database.yml'</span><span class="p">).</span><span class="nf">to_s</span><span class="p">]</span>
+
+    <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Migrator</span><span class="p">.</span><span class="nf">migrations_paths</span> <span class="o">=</span> <span class="n">root</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s1">'db/migrate'</span><span class="p">).</span><span class="nf">to_s</span>
+  <span class="k">end</span>
+
+  <span class="n">admin_task</span> <span class="o">=</span> <span class="o">-&gt;</span><span class="p">(</span><span class="nb">name</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">task</span> <span class="nb">name</span> <span class="o">=&gt;</span> <span class="ss">:set_custom_db_config_paths</span> <span class="k">do</span>
+      <span class="no">Rake</span><span class="o">::</span><span class="no">Task</span><span class="p">[</span><span class="nb">name</span><span class="p">].</span><span class="nf">invoke</span>
+    <span class="k">end</span>
+  <span class="p">}</span>
+
+  <span class="sx">%w(db:drop db:create db:migrate db:rollback db:seed db:version
+     db:schema:dump db:schema:load db:structure:dump db:structure:load)</span><span class="p">.</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">t</span><span class="o">|</span>
+    <span class="n">admin_task</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">set_custom_db_config_paths</code>で、migrationの情報を書き換える。そうすることでmigrationを親アプリにコピーすること無く実行することが出来る。実行したい場合にはEngineを読み込む必要があるので</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ SERVER_TYPE_ADMIN</span><span class="o">=</span>1 bin/rake admin:db:create
+</code></pre></div></div>
+
+<p>的な感じで実行するか、開発のローカル環境なら<a href="https://github.com/bkeepers/dotenv">dotenv</a>などを使って常に読みこむようにしておいても良いかもしれない。</p>
+
+<h2 id="tips">Tips</h2>
+
+<p>Rails Engine側で使用するgemは<code class="language-plaintext highlighter-rouge">&lt;engine_path&gt;/&lt;name&gt;.gemspec</code>に追加する。その場合Bundlerを経由しているわけではないので自動的にrequireされることは無い。なのでgemを追加した場合には<code class="language-plaintext highlighter-rouge">&lt;engine_path&gt;/lib/&lt;name&gt;/engine.rb</code>でrequireしてあげる必要がある。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># admin/admin.gemspec</span>
+
+<span class="no">Gem</span><span class="o">::</span><span class="no">Specification</span><span class="p">.</span><span class="nf">new</span> <span class="k">do</span> <span class="o">|</span><span class="n">s</span><span class="o">|</span>
+  <span class="n">s</span><span class="p">.</span><span class="nf">add_dependency</span> <span class="s2">"draper"</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># admin/lib/admin/engine.rb</span>
+
+<span class="nb">require</span> <span class="s2">"draper"</span>
+
+<span class="k">module</span> <span class="nn">Admin</span>
+  <span class="k">class</span> <span class="nc">Engine</span> <span class="o">&lt;</span> <span class="o">::</span><span class="no">Rails</span><span class="o">::</span><span class="no">Engine</span>
+    <span class="n">isolate_namespace</span> <span class="no">Admin</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>assets系のgemとかを追加した場合には読み込まれずに悩むことになるので気をつけたほうが良い。別に従わずに上で定義したGemfileのgroup内に追加してもいいし、その場合はこれは不要だけど。</p>
+
+<p>後、コントローラーの追加などはちゃんとEngine内のbin/railsでgenerateしたほうが良い。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">require_dependency</span> <span class="s2">"admin/application_controller"</span>
+
+<span class="k">module</span> <span class="nn">Admin</span>
+  <span class="k">class</span> <span class="nc">UsersController</span> <span class="o">&lt;</span> <span class="no">ApplicationController</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>あるいは、<code class="language-plaintext highlighter-rouge">require_dependency</code>をちゃんとつけたほうがいい。何故なのかと言うと、Railsではローカルなどの開発環境ではファイルの変更があった場合にクラスが再ロードされる。その時先に親アプリのApplicationControllerが評価されるpathを通った場合、以降Engine側のApplicationControllerの評価が親アプリのクラスとして実行されてしまうから。</p>
+
+<p>autoloadの問題なので、この様に定義する形でも回避できる。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">class</span> <span class="nc">Admin::UsersController</span> <span class="o">&lt;</span> <span class="no">Admin</span><span class="o">::</span><span class="no">ApplicationController</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>詳細はRailsGuidesの<a href="http://railsguides.jp/constant_autoloading_and_reloading.html">このへん</a>が詳しい。</p>
+
+<p>親アプリの何かをEngine側から拡張したい場合には<code class="language-plaintext highlighter-rouge">to_prepare</code>で追加する。これも上と同様で、そうしないとクラスの再ロード時に問題がでる。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">module</span> <span class="nn">Admin</span>
+  <span class="k">class</span> <span class="nc">Engine</span> <span class="o">&lt;</span> <span class="o">::</span><span class="no">Rails</span><span class="o">::</span><span class="no">Engine</span>
+    <span class="n">isolate_namespace</span> <span class="no">Admin</span>
+
+    <span class="n">config</span><span class="p">.</span><span class="nf">to_prepare</span> <span class="k">do</span>
+      <span class="o">::</span><span class="no">ApplicationController</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="ss">:include</span><span class="p">,</span> <span class="no">SuperGrateModule</span><span class="p">)</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>ユースケースとしては、refererを見てデバック用画面のフォームからAPIへのリクエストだった場合だけユーザー情報をsessionに格納したり、エラーログにメッセージを追加したりするmoduleをEngine側からincludeさせたりしている。結局は普通の同一プロセスにロードされるRubyプログラムなので、まあなんとでもなると思う。</p>
+
+<h2 id="おわり">おわり</h2>
+
+<p>APIサーバーと付随するWebUIをEngineで分離すると、それぞれが開発のサイクルやデプロイのタイミングなんかも異なったりするので安心感があって良い。migration周りは若干バットノウハウ気味だけど用件的にしょうがない部分あるのでまあいいんじゃないかな。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[この記事は Ruby on Rails Advent Calendar 2015 15日目の記事です。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">RustだけでRuby native extensionを書く</title><link href="https://daichi.dev/posts/2015-12-10-ruby-native-extension-by-rust" rel="alternate" type="text/html" title="RustだけでRuby native extensionを書く" /><published>2015-12-10T00:00:00+09:00</published><updated>2015-12-10T00:00:00+09:00</updated><id>https://daichi.dev/posts/ruby-native-extension-by-rust</id><content type="html" xml:base="https://daichi.dev/posts/2015-12-10-ruby-native-extension-by-rust"><![CDATA[<p>この記事は <a href="http://qiita.com/advent-calendar/2015/rust-lang">Rust Advent Calendar 2015</a> 10日目の記事です。</p>
+
+<p>Rustは共有ライブラリを生成してCのプログラムとリンクすることが可能らしいので、Rubyからrequireしてちゃんと動くnative extensionをRustだけを使って書いてみる。</p>
+
+<p>既に似たようなことを<a href="https://www.youtube.com/watch?v=IqrwPVtSHZI">やっている例</a>はあるんだけど、Cファイルを用意してそこからRustを呼び出す形になっているので、今回はCを書かずにやってみたいと思う。ちなみに実用性は特に無いのであしからず。</p>
+
+<h2 id="dylib">Dylib</h2>
+
+<p>Rustで共有ライブラリを作成してCから呼び出すには、以下のようにすればよい。</p>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">#![crate_type</span> <span class="nd">=</span> <span class="s">"dylib"</span><span class="nd">]</span>
+
+<span class="nd">#[no_mangle]</span>
+<span class="k">pub</span> <span class="k">extern</span> <span class="k">fn</span> <span class="nf">rust_test</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="nb">i32</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nd">println!</span><span class="p">(</span><span class="s">"rust_test {0}"</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">#[no_mangle]</code>でマングリング前の関数名をシンボルテーブルに登録し、<code class="language-plaintext highlighter-rouge">extern</code>でC ABIを用いるようにする。後はこのファイルを<code class="language-plaintext highlighter-rouge">rustc</code>を使ってコンパイルする。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rustc test.rs
+</code></pre></div></div>
+
+<p>この共有ライブラリをリンクするC側のコードは特別なことをする必要は無い。</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdint.h&gt;</span><span class="cp">
+</span>
+<span class="kt">void</span> <span class="nf">rust_test</span><span class="p">(</span><span class="kt">int32_t</span> <span class="n">i</span><span class="p">);</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">rust_test</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>あとは以下のようにコンパイルすれば良い。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>cc <span class="nt">-L</span><span class="nb">.</span> <span class="nt">-ltest</span> test.c <span class="nt">-o</span> <span class="nb">test</span>
+<span class="nv">$ </span>./test
+rust_test 10
+</code></pre></div></div>
+
+<h2 id="ffi">FFI</h2>
+
+<p>RustからCを呼び出すには<a href="http://qiita.com/kondei/items/b448fd7e15a0a1784309">Rustの他言語関数インターフェース（FFI）のガイド - Qiita</a>に日本語訳があるのでそれをみるのがわかりやすいと思う。</p>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">extern</span> <span class="k">crate</span> <span class="n">libc</span><span class="p">;</span>
+<span class="k">use</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">size_t</span><span class="p">;</span>
+
+<span class="nd">#[link(name</span> <span class="nd">=</span> <span class="s">"snappy"</span><span class="nd">)]</span>
+<span class="k">extern</span> <span class="p">{</span>
+    <span class="k">fn</span> <span class="nf">snappy_max_compressed_length</span><span class="p">(</span><span class="n">source_length</span><span class="p">:</span> <span class="nb">size_t</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">size_t</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">x</span> <span class="o">=</span> <span class="k">unsafe</span> <span class="p">{</span> <span class="nf">snappy_max_compressed_length</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span> <span class="p">};</span>
+    <span class="nd">println!</span><span class="p">(</span><span class="s">"max compressed length of a 100 byte buffer: {}"</span><span class="p">,</span> <span class="n">x</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>ざっくりと説明すると、Cの型は<code class="language-plaintext highlighter-rouge">libc</code>というcrateに大体定義されているのでそれを使えば良い。後はexternブロック内に関数シグネチャを定義していく。C側の関数を実際に呼び出す際にはRustの安全機構外の関数を呼ぶことになるので<code class="language-plaintext highlighter-rouge">unsafe</code>ブロックで囲う必要がある。<code class="language-plaintext highlighter-rouge">link</code>attributeを指定すると、指定ライブラリとリンクしたバイナリが生成される。が、今回はリンクさせたくないのでattributeは使用しない。</p>
+
+<h2 id="ruby-native-extension">Ruby native extension</h2>
+
+<p>Rubyのnative extensionはロード時にdlsymで<code class="language-plaintext highlighter-rouge">Init_&lt;file_name&gt;</code>という関数のポインタを取得して実行を試みる。それに合わせた関数を定義してあげるとそこがエントリーポイントになる。</p>
+
+<p>まずは最小構成でrequire出来るライブラリを作成してみる。</p>
+
+<ul>
+  <li>Cargo.toml</li>
+</ul>
+
+<div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nn">[package]</span>
+<span class="py">name</span> <span class="p">=</span> <span class="s">"rust"</span>
+<span class="py">version</span> <span class="p">=</span> <span class="s">"0.1.0"</span>
+
+<span class="nn">[lib]</span>
+<span class="py">name</span> <span class="p">=</span> <span class="s">"rust"</span>
+<span class="py">crate-type</span> <span class="p">=</span> <span class="p">[</span><span class="s">"dylib"</span><span class="p">]</span>
+</code></pre></div></div>
+
+<ul>
+  <li>src/lib.rs</li>
+</ul>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">#![allow(non_snake_case)]</span>
+
+<span class="nd">#[no_mangle]</span>
+<span class="k">pub</span> <span class="k">extern</span> <span class="k">fn</span> <span class="nf">Init_rust</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nd">println!</span><span class="p">(</span><span class="s">"Init_rust"</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>コンパイルして実際にRubyから呼び出してみる。Ruby側でロードしたタイミングで標準出力に文字列が出力されるはず。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>cargo build
+   Compiling rust v0.1.0 <span class="o">(</span>file:///Users/xxxx<span class="o">)</span>
+
+<span class="c"># RubyはDynamic Loadingなファイルをロードする為、.bundleに書き換える</span>
+<span class="nv">$ </span><span class="nb">mv </span>target/debug/librust.dylib rust.bundle
+
+<span class="nv">$ </span>irb <span class="nt">-r</span>./rust
+Init_rust
+irb<span class="o">(</span>main<span class="o">)</span>:001:0&gt;
+</code></pre></div></div>
+
+<p>次に、RustからRubyのクラスを定義してみる。今回からはlibcを使用するためCargo.tomlに下記を追加する。ちなみにポインタのサイズとかはOSXに合わせて決め打ちする。</p>
+
+<ul>
+  <li>Cargo.toml</li>
+</ul>
+
+<div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nn">[dependencies]</span>
+<span class="py">libc</span> <span class="p">=</span> <span class="s">"0.2.2"</span>
+</code></pre></div></div>
+
+<p>次に、src/lib.rsを以下のように書き換える。</p>
+
+<ul>
+  <li>src/lib.rs</li>
+</ul>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">#![allow(non_snake_case,</span> <span class="nd">non_camel_case_types)]</span>
+
+<span class="k">extern</span> <span class="k">crate</span> <span class="n">libc</span><span class="p">;</span>
+<span class="k">use</span> <span class="nn">std</span><span class="p">::</span><span class="nn">ffi</span><span class="p">::</span><span class="n">CString</span><span class="p">;</span>
+
+<span class="k">type</span> <span class="n">VALUE</span> <span class="o">=</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_ulong</span><span class="p">;</span>
+
+<span class="k">extern</span> <span class="p">{</span>
+    <span class="k">static</span> <span class="n">rb_cObject</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">;</span>
+
+    <span class="k">fn</span> <span class="nf">rb_define_class</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="o">*</span><span class="k">const</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_char</span><span class="p">,</span> <span class="n">rb_super</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">VALUE</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="nd">#[no_mangle]</span>
+<span class="k">pub</span> <span class="k">extern</span> <span class="k">fn</span> <span class="nf">Init_rust</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">c_name</span> <span class="o">=</span> <span class="nn">CString</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="s">"Rust"</span><span class="p">)</span><span class="nf">.unwrap</span><span class="p">();</span>
+
+    <span class="k">unsafe</span> <span class="p">{</span> <span class="nf">rb_define_class</span><span class="p">(</span><span class="n">c_name</span><span class="nf">.as_ptr</span><span class="p">(),</span> <span class="n">rb_cObject</span><span class="p">)</span> <span class="p">};</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">VALUE</code>はRubyのデータを扱うC側の型で、構造体に対するポインタ又は値その物。<code class="language-plaintext highlighter-rouge">rb_cObject</code>はC側の外部変数なので、Rustから参照するにはexternブロック内でstaticとして定義する。今回は書き換える必要は無いので<code class="language-plaintext highlighter-rouge">*mut</code>はつけない。<code class="language-plaintext highlighter-rouge">rb_define_class</code>はC側では</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">VALUE</span> <span class="nf">rb_define_class</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">name</span><span class="p">,</span> <span class="n">VALUE</span> <span class="n">super</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>という関数なのでそれに対応する関数シグネチャをRust側に定義する。RustからC側の関数に文字列を渡す場合には<code class="language-plaintext highlighter-rouge">std::ffi::CString</code>を経由する必要がある。</p>
+
+<p>これらをlink attributeを使わずにコンパイルする為には、linkerにオプションを渡す必要がある(link-argsはstable releaseでは使えない)。 が、<code class="language-plaintext highlighter-rouge">cargo build</code>ではlinkerにオプションを渡せない仕様になっているので<code class="language-plaintext highlighter-rouge">cargo rustc</code>を使用する。ただ、linkerにオプションを渡すことは推奨されていない。今のrustcはccを使ってるけど、今後はllvmを直接使うかもしれないし他の何かに置き換わった場合それらのオプションが無意味になるから。今回はちょっとしたお遊びなので無視して渡している。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cargo rustc <span class="nt">-Clink-args</span><span class="o">=</span><span class="s1">'-Wl,-undefined,dynamic_lookup'</span>
+   Compiling rust v0.1.0 <span class="o">(</span>file:///Users/xxxxx<span class="o">)</span>
+
+<span class="nb">mv </span>target/debug/librust.dylib ./rust.bundle
+
+<span class="nv">$ </span>irb <span class="nt">-r</span>./rust
+irb<span class="o">(</span>main<span class="o">)</span>:001:0&gt; Rust
+<span class="o">=&gt;</span> Rust
+irb<span class="o">(</span>main<span class="o">)</span>:002:0&gt; Rust.new
+<span class="o">=&gt;</span> <span class="c">#&lt;Rust:0x007fe25200ffa0&gt;</span>
+</code></pre></div></div>
+
+<p>ちゃんとRubyの世界で<code class="language-plaintext highlighter-rouge">Rust</code>が定義されていてインスタンスが生成できる。</p>
+
+<p>後は、必要そうな関数をピックアップしてRust側に外部変数や関数シグネチャなどを追加していけば良い。試しに、よくあるフィボナッチ数を求める関数を持ったクラスを定義してみる。</p>
+
+<ul>
+  <li>src/fib.rs</li>
+</ul>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">pub</span> <span class="k">fn</span> <span class="nf">fib</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">u32</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nb">u32</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;=</span> <span class="mi">1</span> <span class="p">{</span>
+        <span class="n">n</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="nf">fib</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="nf">fib</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<ul>
+  <li>src/lib.rs</li>
+</ul>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">#![allow(non_snake_case,</span> <span class="nd">non_camel_case_types)]</span>
+
+<span class="k">extern</span> <span class="k">crate</span> <span class="n">libc</span><span class="p">;</span>
+<span class="k">mod</span> <span class="n">fib</span><span class="p">;</span>
+
+<span class="k">use</span> <span class="nn">std</span><span class="p">::</span><span class="nn">ffi</span><span class="p">::</span><span class="n">CString</span><span class="p">;</span>
+
+<span class="k">type</span> <span class="n">VALUE</span> <span class="o">=</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_ulong</span><span class="p">;</span>
+
+<span class="k">extern</span> <span class="p">{</span>
+    <span class="k">static</span> <span class="n">rb_cObject</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">;</span>
+
+    <span class="k">fn</span> <span class="nf">rb_define_class</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="o">*</span><span class="k">const</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_char</span><span class="p">,</span> <span class="n">rb_super</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">VALUE</span><span class="p">;</span>
+
+    <span class="k">fn</span> <span class="nf">rb_define_method</span><span class="p">(</span><span class="n">klass</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">,</span>
+                        <span class="n">name</span><span class="p">:</span> <span class="o">*</span><span class="k">const</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_char</span><span class="p">,</span>
+                        <span class="n">func</span><span class="p">:</span> <span class="k">extern</span> <span class="k">fn</span><span class="p">(</span><span class="n">v</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">,</span> <span class="n">v2</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">),</span>
+                        <span class="n">argc</span><span class="p">:</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_int</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_void</span><span class="p">;</span>
+
+    <span class="k">fn</span> <span class="nf">rb_num2long</span><span class="p">(</span><span class="n">val</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_long</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">fn</span> <span class="nf">rb_int2fix</span><span class="p">(</span><span class="n">num</span><span class="p">:</span> <span class="nb">u32</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">VALUE</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="p">((</span><span class="n">num</span> <span class="k">as</span> <span class="n">VALUE</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">|</span> <span class="mi">0x01</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">extern</span> <span class="k">fn</span> <span class="nf">rb_fib</span><span class="p">(</span><span class="n">_</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">,</span> <span class="n">rb_num</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">num</span> <span class="o">=</span> <span class="k">unsafe</span> <span class="p">{</span> <span class="nf">rb_num2long</span><span class="p">(</span><span class="n">rb_num</span><span class="p">)</span> <span class="p">}</span> <span class="k">as</span> <span class="nb">u32</span><span class="p">;</span>
+    <span class="k">let</span> <span class="n">result</span> <span class="o">=</span> <span class="nn">fib</span><span class="p">::</span><span class="nf">fib</span><span class="p">(</span><span class="n">num</span><span class="p">);</span>
+
+    <span class="nf">rb_int2fix</span><span class="p">(</span><span class="n">result</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="nd">#[no_mangle]</span>
+<span class="k">pub</span> <span class="k">extern</span> <span class="k">fn</span> <span class="nf">Init_rust</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">c_name</span> <span class="o">=</span> <span class="nn">CString</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="s">"Rust"</span><span class="p">)</span><span class="nf">.unwrap</span><span class="p">();</span>
+    <span class="k">let</span> <span class="n">fib</span> <span class="o">=</span> <span class="nn">CString</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="s">"fib"</span><span class="p">)</span><span class="nf">.unwrap</span><span class="p">();</span>
+
+    <span class="k">unsafe</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="n">rb_cRust</span> <span class="o">=</span> <span class="nf">rb_define_class</span><span class="p">(</span><span class="n">c_name</span><span class="nf">.as_ptr</span><span class="p">(),</span> <span class="n">rb_cObject</span><span class="p">);</span>
+
+        <span class="nf">rb_define_method</span><span class="p">(</span><span class="n">rb_cRust</span><span class="p">,</span> <span class="n">fib</span><span class="nf">.as_ptr</span><span class="p">(),</span> <span class="n">rb_fib</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>実行してみると正しく動いていることが分かる。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>cargo rustc <span class="nt">-Clink-args</span><span class="o">=</span><span class="s1">'-Wl,-undefined,dynamic_lookup'</span>
+   Compiling ruby v0.1.0 <span class="o">(</span>file:///Users/xxxxxxxx<span class="o">)</span>
+
+<span class="nv">$ </span>irb <span class="nt">-r</span> ./target/debug/rust
+irb<span class="o">(</span>main<span class="o">)</span>:001:0&gt; Rust.new.fib<span class="o">(</span>10<span class="o">)</span>
+<span class="o">=&gt;</span> 55
+</code></pre></div></div>
+
+<p>今回作成したファイルは<a href="https://github.com/daichirata/rust_ruby_extension">daichirata/rust_ruby_extention</a>に置いてる。</p>
+
+<h2 id="つらいところ">つらいところ</h2>
+
+<p>CのヘッダーからRustの定義ファイルを生成する<a href="https://github.com/crabtw/rust-bindgen">crabtw/rust-bindgen</a>というツールが一応あって、このツールを元にRubyのヘッダーファイルの定義を出力すると<a href="https://github.com/daichirata/rust_ruby_extension/blob/master/src/bindgen.rs">こうなる。</a>完璧な変換までは難しくて、そのままではエラーになって使うことが出来ないんだけど、結構参考になると思うので一旦出力してこのファイルを見ながらやると捗ると思う。</p>
+
+<p>ただ、当然なんだけどCのマクロには対応していないので、対応するCの関数があれば良いんだけど無かった場合には自分で実装する必要がある。例えばCのintをVALUEに変換する<code class="language-plaintext highlighter-rouge">FIX2LONG</code>マクロとか。Rubyは比較的対応する関数が多い気がするので意外となんとかなるかも？</p>
+
+<p>後、Rustの可変長引数への対応もすごく微妙でやり方がわからなかったので、上の例ではごまかしている部分がある。<code class="language-plaintext highlighter-rouge">rb_define_method</code>というC側の関数は3番目の引数に関数ポインタを受け取るんだけど、引数が可変長引数として定義されている。Rustでもexternブロック内の関数シグネチャには可変長に定義できるっぽいので初めは</p>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">extern</span> <span class="p">{</span>
+    <span class="k">fn</span> <span class="nf">rb_define_method</span><span class="p">(</span><span class="n">klass</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">,</span>
+                        <span class="n">name</span><span class="p">:</span> <span class="o">*</span><span class="k">const</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_char</span><span class="p">,</span>
+                        <span class="n">func</span><span class="p">:</span> <span class="k">extern</span> <span class="k">fn</span><span class="p">(</span><span class="n">v</span><span class="p">:</span> <span class="n">VALUE</span><span class="p">,</span> <span class="o">...</span><span class="p">),</span>
+                        <span class="n">argc</span><span class="p">:</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_int</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="nn">libc</span><span class="p">::</span><span class="nb">c_void</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>と定義していたんだけど、rb_fibを渡している部分で型が一致しないとかでコンパイルが通らないので結局あきらめて、2つの引数を受け取る関数のポインタとして定義してお茶をにごしている。bindgenで生成される奴でもよくわからなかったのでこの辺に詳しい人是非教えて下さい。</p>
+
+<h2 id="おまけ">おまけ</h2>
+
+<p>link attributeを使って正攻法でビルドするには、rubyを共有ライブラリ付きでビルドした上でbuild.rsを追加すれば良い。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ RUBY_CONFIGURE_OPTS</span><span class="o">=</span><span class="s2">"--enable-shared"</span> rbenv <span class="nb">install </span>2.2.3
+</code></pre></div></div>
+
+<ul>
+  <li>build.rs</li>
+</ul>
+
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">use</span> <span class="nn">std</span><span class="p">::</span><span class="nn">process</span><span class="p">::</span><span class="n">Command</span><span class="p">;</span>
+
+<span class="k">fn</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">output</span> <span class="o">=</span> <span class="nn">Command</span><span class="p">::</span><span class="nf">new</span><span class="p">(</span><span class="s">"ruby"</span><span class="p">)</span>
+        <span class="nf">.arg</span><span class="p">(</span><span class="s">"-e"</span><span class="p">)</span>
+        <span class="nf">.arg</span><span class="p">(</span><span class="s">"puts RbConfig::CONFIG['libdir']"</span><span class="p">)</span>
+        <span class="nf">.output</span><span class="p">()</span>
+        <span class="nf">.unwrap_or_else</span><span class="p">(|</span><span class="n">e</span><span class="p">|</span> <span class="p">{</span> <span class="nd">panic!</span><span class="p">(</span><span class="s">"failed to execute process: {}"</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span> <span class="p">});</span>
+
+    <span class="nd">println!</span><span class="p">(</span><span class="s">"cargo:rustc-link-search=native={}"</span><span class="p">,</span> <span class="nn">String</span><span class="p">::</span><span class="nf">from_utf8_lossy</span><span class="p">(</span><span class="o">&amp;</span><span class="n">output</span><span class="py">.stdout</span><span class="p">));</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>後は、externの前の行に<code class="language-plaintext highlighter-rouge">#[link(name = "ruby")]</code>と書けば<code class="language-plaintext highlighter-rouge">cargo build</code>でビルドできる。ただ、librubyにリンクされていて依存関係がある所だけ注意しておいたほうがいい。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[この記事は Rust Advent Calendar 2015 10日目の記事です。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">ActiveRecord Sharding</title><link href="https://daichi.dev/posts/2015-12-01-activerecord-sharding" rel="alternate" type="text/html" title="ActiveRecord Sharding" /><published>2015-12-01T00:00:00+09:00</published><updated>2015-12-01T00:00:00+09:00</updated><id>https://daichi.dev/posts/activerecord-sharding</id><content type="html" xml:base="https://daichi.dev/posts/2015-12-01-activerecord-sharding"><![CDATA[<p><a href="/2015/11/19/activerecord-connection/">前回</a>の続き</p>
+
+<p>ActiveRecordが実際にDBにクエリを発行する場合<code class="language-plaintext highlighter-rouge">ActiveRecord::Base.connection</code>を経由する。話を単純にする為に、クエリの実行だけに限定してShardingを実現しようと思った場合このメソッドがそれぞれのShardに対して確立されたコネクションを返せば良い。</p>
+
+<p>一番多く採用されている実現方法はconnectionメソッドを上書きしてproxyを経由させるパターンで、多くのGemで採用されている。その他にもコネクションの確立方法・管理などで既存のGemがどうやって実現しているかをいくつか紹介する。</p>
+
+<h2 id="octopus">Octopus</h2>
+
+<p>おそらく一番有名なのかもしれないGem。<a href="https://github.com/kovyrin/db-charmer">kovyrin/db-charmer</a>の影響を少なからず受けている。</p>
+
+<p>実際に置き換えているのは、ActiveRecord::BaseにOctopus::Modelをextendした際に実行されるhijack_methodsで行われている。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/octopus/model.rb</span>
+
+<span class="k">def</span> <span class="nf">hijack_methods</span>
+  <span class="c1"># ...</span>
+
+  <span class="k">class</span> <span class="o">&lt;&lt;</span> <span class="nb">self</span>
+    <span class="c1"># ...</span>
+
+    <span class="n">alias_method_chain</span> <span class="ss">:connection</span><span class="p">,</span> <span class="ss">:octopus</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:connection_pool</span><span class="p">,</span> <span class="ss">:octopus</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:clear_all_connections!</span><span class="p">,</span> <span class="ss">:octopus</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:clear_active_connections!</span><span class="p">,</span> <span class="ss">:octopus</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:connected?</span><span class="p">,</span> <span class="ss">:octopus</span>
+
+    <span class="c1"># ...</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">def</span> <span class="nf">connection_with_octopus</span>
+  <span class="k">if</span> <span class="n">should_use_normal_connection?</span>
+    <span class="n">connection_without_octopus</span>
+  <span class="k">else</span>
+    <span class="n">connection_proxy</span><span class="p">.</span><span class="nf">current_model</span> <span class="o">=</span> <span class="nb">self</span>
+    <span class="n">connection_proxy</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">def</span> <span class="nf">connection_proxy</span>
+  <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">class_variable_defined?</span><span class="p">(</span><span class="ss">:@@connection_proxy</span><span class="p">)</span> <span class="o">&amp;&amp;</span>
+    <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">class_variable_get</span><span class="p">(</span><span class="ss">:@@connection_proxy</span><span class="p">)</span> <span class="o">||</span>
+    <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">class_variable_set</span><span class="p">(</span><span class="ss">:@@connection_proxy</span><span class="p">,</span> <span class="no">Octopus</span><span class="o">::</span><span class="no">Proxy</span><span class="p">.</span><span class="nf">new</span><span class="p">)</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>Octopus::Proxyはそこそこにツラみを伴うアレなクラスで、Shard毎のコネクションの切り替え以外にもShardへのコネクション確立(プールの作成)と管理もProxyクラス自身で行っている。つまりActiveRecordのConnectionHandlerのような役割を自前で実装している。初めてconnectionが実行されたタイミングでインスタンスが生成され、initalizeで各Shardへのプールを作成する。</p>
+
+<p>内部ではTLSを使ってShardを管理していて、method_missiongでその時に指定されているShardのコネクションを取得してProxyする。簡単なダミーコードで説明すると</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">Thread</span><span class="p">.</span><span class="nf">current</span><span class="p">[</span><span class="ss">:octopus_shard</span><span class="p">]</span>              <span class="c1"># =&gt; nil</span>
+<span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">connection</span><span class="p">.</span><span class="nf">execute</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>  <span class="c1"># =&gt; default connection.</span>
+
+<span class="no">Octopus</span><span class="p">.</span><span class="nf">using</span><span class="p">(</span><span class="ss">:shard1</span><span class="p">)</span> <span class="k">do</span>
+  <span class="no">Thread</span><span class="p">.</span><span class="nf">current</span><span class="p">[</span><span class="ss">:octopus_shard</span><span class="p">]</span>             <span class="c1"># =&gt; :shard1</span>
+  <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">connection</span><span class="p">.</span><span class="nf">execute</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="c1"># =&gt; :shard1 connection.</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>のような感じ。 Shardへの振り分けはProxyのmethod_missingで</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">method_missing</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">if</span> <span class="n">should_clean_connection_proxy?</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
+    <span class="n">conn</span> <span class="o">=</span> <span class="n">select_connection</span>
+    <span class="nb">self</span><span class="p">.</span><span class="nf">last_current_shard</span> <span class="o">=</span> <span class="n">current_shard</span>
+    <span class="n">clean_connection_proxy</span>
+    <span class="n">conn</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">elsif</span> <span class="n">should_send_queries_to_shard_slave_group?</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
+    <span class="n">send_queries_to_shard_slave_group</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">elsif</span> <span class="n">should_send_queries_to_slave_group?</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
+    <span class="n">send_queries_to_slave_group</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">elsif</span> <span class="n">should_send_queries_to_replicated_databases?</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
+    <span class="n">send_queries_to_selected_slave</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">else</span>
+    <span class="n">select_connection</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>現在のShardに対するconnectionを取得してそのconnectionに対してsendでdelegateする実装になっている。その他にも実際にはRelation・Associationの対応でもう少し作りこみが必要だが基本的な考え方はこれで問題ない。</p>
+
+<h2 id="switchpoint">SwitchPoint</h2>
+
+<p>ShardingではなくR/W splittingに使われているGem。コネクションを切り替えるという点ではだいたい似ているので紹介しておく。軽量なGemで見通しも良いので何か1つガッツリ読みこんで勉強したいのであればこのGemを選択するの良いかもしれない。</p>
+
+<p>SwitchPoint::ModelをincludeしたModelに対してconnectionを差し替える。その後use_switch_pointを実行することでproxyを有効にする。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/switch_point/model.rb</span>
+
+<span class="k">def</span> <span class="nc">self</span><span class="o">.</span><span class="nf">included</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+  <span class="n">model</span><span class="p">.</span><span class="nf">singleton_class</span><span class="p">.</span><span class="nf">class_eval</span> <span class="k">do</span>
+    <span class="kp">include</span> <span class="no">ClassMethods</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:connection</span><span class="p">,</span> <span class="ss">:switch_point</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:cache</span><span class="p">,</span> <span class="ss">:switch_point</span>
+    <span class="n">alias_method_chain</span> <span class="ss">:uncached</span><span class="p">,</span> <span class="ss">:switch_point</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">module</span> <span class="nn">ClassMethods</span>
+  <span class="k">def</span> <span class="nf">connection_with_switch_point</span>
+    <span class="k">if</span> <span class="n">switch_point_proxy</span>
+      <span class="n">switch_point_proxy</span><span class="p">.</span><span class="nf">connection</span>
+    <span class="k">else</span>
+      <span class="n">connection_without_switch_point</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="nf">switch_point_proxy</span>
+    <span class="k">if</span> <span class="vi">@switch_point_name</span>
+      <span class="no">ProxyRepository</span><span class="p">.</span><span class="nf">checkout</span><span class="p">(</span><span class="vi">@switch_point_name</span><span class="p">)</span>
+    <span class="k">elsif</span> <span class="nb">self</span> <span class="o">==</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span>
+      <span class="kp">nil</span>
+    <span class="k">else</span>
+      <span class="n">superclass</span><span class="p">.</span><span class="nf">switch_point_proxy</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>コネクションはProxyRepository.checkoutのタイミングで未初期化の@switch_point_nameであれば作成される。また、継承関係にも対応していて自身でuse_switch_pointを実行していないクラスは親クラスのproxyをたどることでActiveRecordの様にコネクションを使い回す様になっている。</p>
+
+<p>コネクションの確立方法は、ActiveRecord::Baseを継承するダミークラスを作成してそのクラスを使ってestablish_connectionを実行している。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/switch_point/proxy.rb</span>
+
+<span class="k">def</span> <span class="nf">define_model</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span>
+  <span class="n">model_name</span> <span class="o">=</span> <span class="no">SwitchPoint</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">model_name</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span>
+  <span class="k">if</span> <span class="n">model_name</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="no">Class</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">)</span>
+    <span class="no">Proxy</span><span class="p">.</span><span class="nf">const_set</span><span class="p">(</span><span class="n">model_name</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+    <span class="n">model</span><span class="p">.</span><span class="nf">establish_connection</span><span class="p">(</span><span class="no">SwitchPoint</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">database_name</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="n">mode</span><span class="p">))</span>
+    <span class="n">model</span>
+  <span class="k">elsif</span> <span class="n">mode</span> <span class="o">==</span> <span class="ss">:readonly</span>
+    <span class="c1"># Re-use writable connection</span>
+    <span class="no">Proxy</span><span class="p">.</span><span class="nf">const_get</span><span class="p">(</span><span class="no">SwitchPoint</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">model_name</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="ss">:writable</span><span class="p">))</span>
+  <span class="k">else</span>
+    <span class="no">Class</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>後は必要に応じてクラスを取り出してconnectionを取得する。この方式のいいところはOctopusと違ってestablish_connection経由でのコネクション確立なのでActiveRecordの変更に比較的強い所と、ActiveRecord::BaseのConnectionHandlerに管理を任せられる部分にある(clear_active_connections!等の確保済みコネクションに対する処理の辺り)。</p>
+
+<p>SwitchPointもproxy内部でmodeがTLSで管理されていてreadとwriteのコネクションを切り替える仕組みになっている。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">Article</span><span class="p">.</span><span class="nf">with_readonly</span> <span class="p">{</span> <span class="no">Article</span><span class="p">.</span><span class="nf">first</span> <span class="p">}</span> <span class="c1"># Read from db-blog-slave</span>
+<span class="no">Category</span><span class="p">.</span><span class="nf">with_readonly</span> <span class="p">{</span> <span class="no">Category</span><span class="p">.</span><span class="nf">first</span> <span class="p">}</span> <span class="c1"># Also read from db-blog-slave</span>
+<span class="no">Comment</span><span class="p">.</span><span class="nf">with_readonly</span> <span class="p">{</span> <span class="no">Comment</span><span class="p">.</span><span class="nf">first</span> <span class="p">}</span> <span class="c1"># Read from db-comment-slave</span>
+
+<span class="no">Article</span><span class="p">.</span><span class="nf">with_readonly</span> <span class="k">do</span>
+  <span class="n">article</span> <span class="o">=</span> <span class="no">Article</span><span class="p">.</span><span class="nf">first</span>  <span class="c1"># Read from db-blog-slave</span>
+  <span class="n">article</span><span class="p">.</span><span class="nf">title</span> <span class="o">=</span> <span class="s1">'new title'</span>
+  <span class="no">Article</span><span class="p">.</span><span class="nf">with_writable</span> <span class="k">do</span>
+    <span class="n">article</span><span class="p">.</span><span class="nf">save!</span>  <span class="c1"># Write to db-blog-master</span>
+    <span class="n">article</span><span class="p">.</span><span class="nf">reload</span>  <span class="c1"># Read from db-blog-master</span>
+    <span class="no">Category</span><span class="p">.</span><span class="nf">first</span>  <span class="c1"># Read from db-blog-master</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<h2 id="activerecordturntable">ActiveRecord::Turntable</h2>
+
+<p>ドリコム製のライブラリ。これまでにあったGemとはアプローチが大きく異なりconnectionを上書きしない。更に<code class="language-plaintext highlighter-rouge">Ocotpus.using</code>のようなShardの指定を明示的に行わずにShardingを実現している。また、クラスタでUniqなIDを生成するためのSequencerが付いてきたりする。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/active_record/turntable/base.rb</span>
+
+<span class="k">def</span> <span class="nf">turntable</span><span class="p">(</span><span class="n">cluster_name</span><span class="p">,</span> <span class="n">shard_key_name</span><span class="p">,</span> <span class="n">options</span> <span class="o">=</span> <span class="p">{})</span>
+  <span class="c1"># ...</span>
+
+  <span class="nb">self</span><span class="p">.</span><span class="nf">turntable_cluster</span> <span class="o">=</span>
+    <span class="nb">self</span><span class="p">.</span><span class="nf">turntable_clusters</span><span class="p">[</span><span class="n">cluster_name</span><span class="p">]</span> <span class="o">||=</span> <span class="no">Cluster</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span>
+                                                <span class="n">turntable_config</span><span class="p">[</span><span class="ss">:clusters</span><span class="p">][</span><span class="n">cluster_name</span><span class="p">],</span>
+                                                <span class="n">options</span>
+                                              <span class="p">)</span>
+  <span class="n">turntable_replace_connection_pool</span>
+<span class="k">end</span>
+
+<span class="k">def</span> <span class="nf">turntable_replace_connection_pool</span>
+  <span class="n">ch</span> <span class="o">=</span> <span class="n">connection_handler</span>
+  <span class="n">cp</span> <span class="o">=</span> <span class="no">ConnectionProxy</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="nb">self</span><span class="p">,</span> <span class="n">turntable_cluster</span><span class="p">)</span>
+  <span class="n">pp</span> <span class="o">=</span> <span class="no">PoolProxy</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="n">cp</span><span class="p">)</span>
+  <span class="n">ch</span><span class="p">.</span><span class="nf">class_to_pool</span><span class="p">.</span><span class="nf">clear</span> <span class="k">if</span> <span class="k">defined?</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="nf">class_to_pool</span><span class="p">)</span>
+  <span class="n">ch</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="ss">:class_to_pool</span><span class="p">)[</span><span class="nb">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">ch</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="ss">:owner_to_pool</span><span class="p">)[</span><span class="nb">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pp</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p><a href="/2015/11/19/activerecord-connection/">前回</a>見たConnectionHandlerのowner_to_poolをConnectionProxyで置き換えている。PoolProxyはプール全体のコネクションに実行する必要のあるメソッドをproxyしている。</p>
+
+<p>コネクションの確立方法はSwitchPoint等と同様に、Shard毎にActiveRecord::Baseを継承するダミークラスを作成してestablish_connectionするパターン。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">get_or_set_connection_class</span>
+  <span class="k">if</span> <span class="no">Connections</span><span class="p">.</span><span class="nf">const_defined?</span><span class="p">(</span><span class="nb">name</span><span class="p">.</span><span class="nf">classify</span><span class="p">)</span>
+    <span class="n">klass</span> <span class="o">=</span> <span class="no">Connections</span><span class="p">.</span><span class="nf">const_get</span><span class="p">(</span><span class="nb">name</span><span class="p">.</span><span class="nf">classify</span><span class="p">)</span>
+  <span class="k">else</span>
+    <span class="n">klass</span> <span class="o">=</span> <span class="no">Class</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">)</span>
+    <span class="no">Connections</span><span class="p">.</span><span class="nf">const_set</span><span class="p">(</span><span class="nb">name</span><span class="p">.</span><span class="nf">classify</span><span class="p">,</span> <span class="n">klass</span><span class="p">)</span>
+    <span class="n">klass</span><span class="p">.</span><span class="nf">abstract_class</span> <span class="o">=</span> <span class="kp">true</span>
+  <span class="k">end</span>
+  <span class="n">klass</span>
+<span class="k">end</span>
+
+<span class="k">def</span> <span class="nf">create_connection_class</span>
+  <span class="n">klass</span> <span class="o">=</span> <span class="n">get_or_set_connection_class</span>
+  <span class="n">klass</span><span class="p">.</span><span class="nf">remove_connection</span>
+  <span class="n">klass</span><span class="p">.</span><span class="nf">establish_connection</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">connection_pool</span><span class="p">.</span><span class="nf">spec</span><span class="p">.</span><span class="nf">config</span><span class="p">[</span><span class="ss">:shards</span><span class="p">][</span><span class="nb">name</span><span class="p">].</span><span class="nf">with_indifferent_access</span>
+  <span class="n">klass</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>後は必要に応じてクラスを取り出してconnectionとconnection_poolを取得する。ただ、Turntableの場合は変更が大きすぎて確保済みのコネクションに対する処理などは自前で行う必要があるっぽいけど。</p>
+
+<p>実際にコネクションを切り替える部分は</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/active_record/turntable/connection_proxy.rb</span>
+
+<span class="k">def</span> <span class="nf">method_missing</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="n">clear_query_cache_if_needed</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
+  <span class="k">if</span> <span class="n">shard_fixed?</span>
+    <span class="n">connection</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">elsif</span> <span class="n">mixable?</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+    <span class="n">fader</span> <span class="o">=</span> <span class="vi">@mixer</span><span class="p">.</span><span class="nf">build_fader</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+    <span class="n">logger</span><span class="p">.</span><span class="nf">debug</span> <span class="p">{</span> <span class="s2">"[ActiveRecord::Turntable] Sending method: </span><span class="si">#{</span><span class="nb">method</span><span class="si">}</span><span class="s2">, "</span> <span class="o">+</span>
+      <span class="s2">"sql: </span><span class="si">#{</span><span class="n">args</span><span class="p">.</span><span class="nf">first</span><span class="si">}</span><span class="s2">, "</span> <span class="o">+</span>
+      <span class="s2">"shards: </span><span class="si">#{</span><span class="n">fader</span><span class="p">.</span><span class="nf">shards_query_hash</span><span class="p">.</span><span class="nf">keys</span><span class="p">.</span><span class="nf">map</span><span class="p">(</span><span class="o">&amp;</span><span class="ss">:name</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span> <span class="p">}</span>
+    <span class="n">fader</span><span class="p">.</span><span class="nf">execute</span>
+  <span class="k">else</span>
+    <span class="n">connection</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>となっている。<code class="language-plaintext highlighter-rouge">shard_fixed?</code>はOctopus.usingでShardを指定した時の様に、Shardが指定されていて判定する必要がない場合。通常のクエリなどで判定の必要がある場合には<code class="language-plaintext highlighter-rouge">@mixer.build_fader</code>でクエリから対象のShardを判定している。この中で引数のSQLを<a href="https://github.com/wvanbergen/sql_tree">wvanbergen/sql_tree</a>を使ってSQLをパースして対象Shardを絞り込んでいる。大分マッチョだ。</p>
+
+<h2 id="other">Other</h2>
+
+<p>その他にも、開発が止まってるものやReplication系の物も含めるといくつかライブラリはある。</p>
+
+<ul>
+  <li><a href="https://github.com/taiki45/mixed_gauge">taiki45/mixed_gauge</a></li>
+  <li><a href="https://github.com/zendesk/active_record_shards">zendesk/active_record_shards</a></li>
+  <li><a href="https://github.com/mperham/data_fabric">mperham/data_fabric</a></li>
+  <li><a href="https://github.com/technoweenie/masochism">technoweenie/masochism</a></li>
+  <li><a href="https://github.com/r7kamura/replicat">r7kamura/replicat</a></li>
+  <li><a href="https://github.com/schoefmax/multi_db">schoefmax/multi_db</a></li>
+  <li><a href="https://github.com/mixonic/ShardTheLove">mixonic/ShardTheLove</a></li>
+</ul>
+
+<h2 id="yet-another">Yet Another</h2>
+
+<p>クエリの実行だけに絞って見てきたが、実際には</p>
+
+<ul>
+  <li>Relation</li>
+  <li>Association</li>
+  <li>Migration</li>
+  <li>QueryCache</li>
+  <li>インスタンスの処理
+    <ul>
+      <li>saveなどで呼ばれるtransactionのコネクション指定</li>
+    </ul>
+  </li>
+  <li>その他connection操作
+    <ul>
+      <li>clear_all_connections!</li>
+      <li>clear_active_connections!</li>
+      <li>etc.</li>
+    </ul>
+  </li>
+</ul>
+
+<p>などコネクションの差替え以外にも作りこまなければいけない部分が多い。が、基本的には上で見てきた切替えがベースとなる。</p>
+
+<p>今私が作っているソーシャルゲームはRailsで書いていてDB ShardingはOctopusを使用しているんだけど、なかなか使いづらい所や不満もそこそこにはあったりする。もう直ってるけどコネクションプールを独自で管理してるのでコネクションがリクエストごとにロストしたりしてたこともある。また、他のDB系のライブラリ(annotate_modelsやdatabase_rewinderとか)が手を入れないとうまく動かない。都度パッチを投げても良いんだけど別の実装アイディアもあったりするので、最近プロトタイプ的な感じで1から新しく設計し始めている。</p>
+
+<p>Sharding用のライブラリはザックリと「コネクションの管理」と「シャードの特定」の2つの要素に分解してそれぞれをコンパクトに実装するのが大切だと思っている。コネクションの管理は各シャードへのコネクション確立とModelがクエリを実行するコネクションの切替部分、シャードの特定はその上で実装されるShardingやReplicationのロジックのことを指している。今作ろうとしているものはコネクションの管理をメインに行うつもりだ。</p>
+
+<p>特にコネクション管理をコンパクトに保つのはとても大切で、ActiveRecordの変更に追従するのは非常に困難であることはよく知られている。(実際に<a href="https://github.com/kovyrin/db-charmer">kovyrin/db-charmer</a>の作者は<a href="http://kovyrin.net/2014/11/14/dbcharmer-suspended/">ギブアップ</a>してしまった)コネクションの管理をうまく一般化・抽象化することができればそのGemが土台となって、ActiveRecordとの互換性を気にせず本当に作りたかった機能に注力出来て皆ハッピーみたいな事が出来ればとか考えていたりする。</p>
+
+<p>まあ実際にやってみるとActiveRecordの設計から大きく外れないように設計し、更には内部のAPIなどを極力呼ばない様に作っていくの抜け道を探しているような、パズルをしているような間隔でそれはそれで楽しいものだ。一種の縛りプレイをやっているような感覚に近いかもしれない。</p>
+
+<p>もう少し設計が固まってきたら、また纏めたいと思う。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[前回の続き]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">ブログをHerokuからOpenShiftに移行する</title><link href="https://daichi.dev/posts/2015-11-30-heroku-to-openshift" rel="alternate" type="text/html" title="ブログをHerokuからOpenShiftに移行する" /><published>2015-11-30T00:00:00+09:00</published><updated>2015-11-30T00:00:00+09:00</updated><id>https://daichi.dev/posts/heroku-to-openshift</id><content type="html" xml:base="https://daichi.dev/posts/2015-11-30-heroku-to-openshift"><![CDATA[<p><img src="/assets/images/posts/2015-11-30-heroku-to-openshift/top.png" alt="" /></p>
+
+<p>Herokuを無料で使い続けることが難しくなってしまい、<a href="http://a-newcomer.com">以前のブログ</a>(Sinatra/<a href="https://github.com/lokka/lokka">Lokka</a>)はどこかに移行しておきたいと思い色々検討した。</p>
+
+<p>意外とHerokuの様に使えるPassがなくて、低スペックとはいえ無料で無制限にっていうのは色々と難しい所あったのかなーとか思いつつもとりあえず、ブログだけ移行できればよかったので3つのアプリまでは無料で動かすことが出来て、Herokuライクに使えそうな<a href="https://www.openshift.com">OpenShift Online</a>に移行してみた。
+Onlineの方はDockerを使ったOpenShift v3ではなくGearとかCartridgeの奴。</p>
+
+<h2 id="rhc">rhc</h2>
+
+<p>WebConsoleも不自由しないくらいには作りこまれているが<a href="https://developers.openshift.com">OpenShift Developers</a>が全て<a href="https://github.com/openshift/rhc">rhc</a>コマンドなので、先ずはrhcをインストールする。大体herokuコマンドのような物だと思えば良い。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>gem <span class="nb">install </span>rhc
+</code></pre></div></div>
+
+<p>ちなみに、OpenShift Developersは結構細かくドキュメントが記載されていて正直ここを見ながらやるだけで特に移行に困ることはなかったの結構良かった。</p>
+
+<p>次に、rhcのセットアップを行う。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc setup
+</code></pre></div></div>
+
+<p>聞かれたとおりに登録メールアドレスやパスワードを入力していく。初めのほうで</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>If you have your own OpenShift server, you can specify it now. Just hit enter to use the server for OpenShift Online: openshift.redhat.com.
+Enter the server hostname: |openshift.redhat.com|
+</code></pre></div></div>
+
+<p>と聞かれるかもしれないが、今回はOpenShift OnlineなのでそのままEnterで問題ない。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Please enter a namespace (letters and numbers only) |&lt;none&gt;|:
+</code></pre></div></div>
+
+<p>の部分に関してはユーザーごとのnamespaceを自分で決めることが出来てそれがドメインの一部になる。
+私はdaichをnamespaceにしたのでアプリは http://xxxx-daich.rhcloud.com というFQDNが割り当てられることになる。</p>
+
+<h2 id="application">Application</h2>
+
+<p>今のところ作成可能なアプリケーションは以下のとおり。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Do-It-Yourself 0.1                      rhc create-app &lt;app name&gt; diy-0.1
+JBoss Application Server 7              rhc create-app &lt;app name&gt; jbossas-7
+JBoss Data Virtualization 6             rhc create-app &lt;app name&gt; jboss-dv-6.1.0
+JBoss Enterprise Application Platform 6 rhc create-app &lt;app name&gt; jbosseap-6
+JBoss Unified Push Server 1.0.0.Beta1   rhc create-app &lt;app name&gt; jboss-unified-push-1
+JBoss Unified Push Server 1.0.0.Beta2   rhc create-app &lt;app name&gt; jboss-unified-push-2
+Jenkins Server                          rhc create-app &lt;app name&gt; jenkins-1
+Node.js 0.10                            rhc create-app &lt;app name&gt; nodejs-0.10
+PHP 5.3                                 rhc create-app &lt;app name&gt; php-5.3
+PHP 5.4                                 rhc create-app &lt;app name&gt; php-5.4
+PHP 5.4 with Zend Server 6.1            rhc create-app &lt;app name&gt; zend-6.1
+Perl 5.10                               rhc create-app &lt;app name&gt; perl-5.10
+Python 2.6                              rhc create-app &lt;app name&gt; python-2.6
+Python 2.7                              rhc create-app &lt;app name&gt; python-2.7
+Python 3.3                              rhc create-app &lt;app name&gt; python-3.3
+Ruby 1.8                                rhc create-app &lt;app name&gt; ruby-1.8
+Ruby 1.9                                rhc create-app &lt;app name&gt; ruby-1.9
+Ruby 2.0                                rhc create-app &lt;app name&gt; ruby-2.0
+Tomcat 6 (JBoss EWS 1.0)                rhc create-app &lt;app name&gt; jbossews-1.0
+Tomcat 7 (JBoss EWS 2.0)                rhc create-app &lt;app name&gt; jbossews-2.0
+Vert.x 2.1                              rhc create-app &lt;app name&gt; jboss-vertx-2.1
+WildFly Application Server 10           rhc create-app &lt;app name&gt; jboss-wildfly-10
+WildFly Application Server 8.2.1.Final  rhc create-app &lt;app name&gt; jboss-wildfly-8
+WildFly Application Server 9            rhc create-app &lt;app name&gt; jboss-wildfly-9
+</code></pre></div></div>
+
+<p>Sinatraを動かしたいのでRuby 2.0を使用する。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc app create anewcomer ruby-2.0
+
+Application Options
+<span class="nt">-------------------</span>
+Domain:     daich
+Cartridges: ruby-2.0
+Gear Size:  default
+Scaling:    no
+
+Creating application <span class="s1">'anewcomer'</span> ... <span class="k">done
+
+</span>Waiting <span class="k">for </span>your DNS name to be available ... <span class="k">done
+
+</span>Cloning into <span class="s1">'anewcomer'</span>...
+Warning: Permanently added the RSA host key <span class="k">for </span>IP address <span class="s1">'xxx.xxx.xxx.xxx'</span> to the list of known hosts.
+
+Your application <span class="s1">'anewcomer'</span> is now available.
+
+  URL:        http://anewcomer-daich.rhcloud.com/
+  SSH to:     xxxx
+  Git remote: xxxxx
+  Cloned to:  /path/to/dir/anewcomer
+
+Run <span class="s1">'rhc show-app anewcomer'</span> <span class="k">for </span>more details about your app.
+</code></pre></div></div>
+
+<p>後は出力されたGit remoteにpushするだけで良い。</p>
+
+<h2 id="database">Database</h2>
+
+<p>今のところ追加出来るCartridgeは以下のとおり。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc cartridge list
+
+jbossas-7                JBoss Application Server 7              web
+jboss-dv-6.1.0 <span class="o">(!)</span>       JBoss Data Virtualization 6             web
+jbosseap-6 <span class="o">(</span><span class="k">*</span><span class="o">)</span>           JBoss Enterprise Application Platform 6 web
+jboss-unified-push-1 <span class="o">(!)</span> JBoss Unified Push Server 1.0.0.Beta1   web
+jboss-unified-push-2 <span class="o">(!)</span> JBoss Unified Push Server 1.0.0.Beta2   web
+jenkins-1                Jenkins Server                          web
+nodejs-0.10              Node.js 0.10                            web
+perl-5.10                Perl 5.10                               web
+php-5.3                  PHP 5.3                                 web
+php-5.4                  PHP 5.4                                 web
+zend-6.1                 PHP 5.4 with Zend Server 6.1            web
+python-2.6               Python 2.6                              web
+python-2.7               Python 2.7                              web
+python-3.3               Python 3.3                              web
+ruby-1.8                 Ruby 1.8                                web
+ruby-1.9                 Ruby 1.9                                web
+ruby-2.0                 Ruby 2.0                                web
+jbossews-1.0             Tomcat 6 <span class="o">(</span>JBoss EWS 1.0<span class="o">)</span>                web
+jbossews-2.0             Tomcat 7 <span class="o">(</span>JBoss EWS 2.0<span class="o">)</span>                web
+jboss-vertx-2.1 <span class="o">(!)</span>      Vert.x 2.1                              web
+jboss-wildfly-10 <span class="o">(!)</span>     WildFly Application Server 10           web
+jboss-wildfly-8 <span class="o">(!)</span>      WildFly Application Server 8.2.1.Final  web
+jboss-wildfly-9 <span class="o">(!)</span>      WildFly Application Server 9            web
+diy-0.1                  Do-It-Yourself 0.1                      web
+cron-1.4                 Cron 1.4                                addon
+jenkins-client-1         Jenkins Client                          addon
+mongodb-2.4              MongoDB 2.4                             addon
+mysql-5.1                MySQL 5.1                               addon
+mysql-5.5                MySQL 5.5                               addon
+phpmyadmin-4             phpMyAdmin 4.0                          addon
+postgresql-8.4           PostgreSQL 8.4                          addon
+postgresql-9.2           PostgreSQL 9.2                          addon
+rockmongo-1.1            RockMongo 1.1                           addon
+switchyard-0             SwitchYard 0.8.0                        addon
+haproxy-1.4              Web Load Balancer                       addon
+
+Note: Web cartridges can only be added to new applications.
+
+<span class="o">(</span><span class="k">*</span><span class="o">)</span> denotes a cartridge with additional usage costs.
+
+<span class="o">(!)</span> denotes a cartridge that will not receive automatic security updates.
+</code></pre></div></div>
+
+<p>Herokuではデフォルトのまま使用していたのでPostgreSQLだったが今回はMySQL5.5を使用する。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc cartridge add mysql-5.5mysql-5.5 <span class="nt">--app</span> anewcomer
+
+Adding mysql-5.5 to application <span class="s1">'anewcomer'</span> ... <span class="k">done
+
+</span>mysql-5.5 <span class="o">(</span>MySQL 5.5<span class="o">)</span>
+<span class="nt">---------------------</span>
+  Gears:          Located with ruby-2.0
+  Connection URL: mysql://<span class="nv">$OPENSHIFT_MYSQL_DB_HOST</span>:<span class="nv">$OPENSHIFT_MYSQL_DB_PORT</span>/
+  Database Name:  xxxx
+  Password:       xxxx
+  Username:       xxxx
+
+MySQL 5.5 database added.  Please make note of these credentials:
+
+       Root User: xxxx
+   Root Password: xxxx
+   Database Name: xxxx
+
+Connection URL: mysql://<span class="nv">$OPENSHIFT_MYSQL_DB_HOST</span>:<span class="nv">$OPENSHIFT_MYSQL_DB_PORT</span>/
+
+You can manage your new MySQL database by also embedding phpmyadmin.
+The phpmyadmin username and password will be the same as the MySQL credentials above.
+</code></pre></div></div>
+
+<p>UserやPasswordが出力されているが、基本的にDBの情報は全て環境変数として提供されているのでそこからアクセスする。
+<a href="https://developers.openshift.com/en/databases-mysql.html">MySQL on OpenShift</a></p>
+
+<h2 id="heroku-to-openshift">Heroku to OpenShift</h2>
+
+<p>アプリケーションを作成した際に出来た初期リポジトリをクローンしてきて、中にある<code class="language-plaintext highlighter-rouge">.openshift</code>ディレクトリをherokuにDeployしているアプリにコピーしておく。
+その後openshiftをremoteとして追加してpushする。内部ではPassengerが動いていてRackベースのアプリはconfig.ruを元に起動する。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code># Template Repository Layout
+tmp/               Temporary storage
+public/            Content (images, CSS, etc. available to the public)
+config.ru          This file is used by Rack-based servers to start the application.
+.openshift/        Location for OpenShift specific files
+    action_hooks/  See the Action Hooks documentation
+    markers/       See the Markers section below
+</code></pre></div></div>
+
+<p>次にOpenShiftで動かすために変更した部分。</p>
+
+<p>database.yml</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">production</span><span class="pi">:</span>
+  <span class="na">dsn</span><span class="pi">:</span> <span class="s">&lt;%= "#{ENV['OPENSHIFT_MYSQL_DB_URL']}/#{ENV['OPENSHIFT_APP_NAME']}" %&gt;</span>
+</code></pre></div></div>
+
+<p>Gemfile</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># RubyGemsミラーがOpenShift内部にあってこっちのほうが早い</span>
+<span class="c1"># https://developers.openshift.com/en/ruby-getting-started.html#_ruby_mirror</span>
+<span class="n">source</span> <span class="s1">'http://mirror.ops.rhcloud.com/mirror/ruby/'</span>
+
+<span class="c1"># 1.5.2でなければ動かない</span>
+<span class="n">gem</span> <span class="s1">'rack'</span><span class="p">,</span> <span class="s1">'1.5.2'</span>
+</code></pre></div></div>
+
+<p>config.ru</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># default_externalを直接指定しておかないとうまく動かない所がある。</span>
+<span class="c1"># Railsを参考にしたけどこの辺のベストプラクティスよくわかってない。</span>
+<span class="no">Encoding</span><span class="p">.</span><span class="nf">default_external</span> <span class="o">=</span> <span class="no">Encoding</span><span class="o">::</span><span class="no">UTF_8</span>
+<span class="no">Encoding</span><span class="p">.</span><span class="nf">default_internal</span> <span class="o">=</span> <span class="no">Encoding</span><span class="o">::</span><span class="no">UTF_8</span>
+</code></pre></div></div>
+
+<p>次に環境変数を設定する。人によっては不要かもしれない。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc <span class="nb">env set </span><span class="nv">RACK_ENV</span><span class="o">=</span>production <span class="nv">BUNDLE_WITHOUT</span><span class="o">=</span>development:test:postgresql <span class="nt">-a</span> anewcomer
+</code></pre></div></div>
+
+<p>最後に、Passengerのhot deployに対応させておく。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">touch</span> .openshift/markers/hot_deploy
+</code></pre></div></div>
+
+<p>.openshiftにはこういう設定や、DeployやStart等のActionHookを置いてくことになる。</p>
+
+<p>取り敢えずここで一旦remoteにpushしたらデプロイが実行されると思うので、
+その後sshで接続してrakeタスクを実行してDBをセットアップして動作確認を行う。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc app ssh anewcomer
+
+<span class="c"># $OPENSHIFT_REPO_DIRにデプロイされたアプリケーションのPathがセットされてる</span>
+<span class="o">&gt;</span> <span class="nb">cd</span> <span class="nv">$OPENSHIFT_REPO_DIR</span>
+<span class="o">&gt;</span> bundle <span class="nb">exec </span>rake db:setup <span class="nv">RACK_ENV</span><span class="o">=</span>production
+</code></pre></div></div>
+
+<p>特に問題がなければこれで一旦初期状態のアプリが表示されていると思う。</p>
+
+<h2 id="data-migration">Data Migration</h2>
+
+<p>データの移行には<a href="https://github.com/ricardochimal/taps">taps</a>を使う。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>gem i taps sqlite3 mysql pg
+</code></pre></div></div>
+
+<p>herokuはDBへのエンドポイントがあったがOpenShiftには多分無い。
+接続したい場合にはrhcにport-forwardを行うコマンドがあるのでそれで一時的に接続できるようにする。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc port-forward anewcomer
+
+Checking available ports ... <span class="k">done
+</span>Forwarding ports ...
+
+To connect to a service running on OpenShift, use the Local address
+
+Service Local                OpenShift
+<span class="nt">-------</span> <span class="nt">---------------</span> <span class="nt">----</span> <span class="nt">------------------</span>
+httpd   127.0.0.1:8080   <span class="o">=&gt;</span>  xx.xx.xx.xx:8080
+mysql   127.0.0.1:3306   <span class="o">=&gt;</span>  xx.xx.xx.xx:3306
+ruby    127.0.0.1:26226  <span class="o">=&gt;</span>  xx.xx.xx.xx:26226
+
+Press CTRL-C to terminate port forwarding
+</code></pre></div></div>
+
+<p>別ターミナルでtapsのサーバーを立てる。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>taps server <span class="s1">'mysql://username:password@127.0.0.1:3306/app_name?encoding=utf8'</span> tapsuser tapspass
+</code></pre></div></div>
+
+<p>MySQLの接続情報は作成時に表示さていた情報。わからない場合はsshしてechoするかWebConsoleで確認できるかも。</p>
+
+<p>あとはHerokuのPostgreSQLからpushする。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>taps push <span class="s1">'postgres://username:password@xxx.xxx.xxx.xxx.compute-1.amazonaws.com:5432/dbname'</span> http://tapsuser:tapspass@localhost:5000
+</code></pre></div></div>
+
+<p>これだけで異なるミドルウェア・PaaS間でのデータ移行が済んでしまうtapsは最高に便利。</p>
+
+<h2 id="naked-domain">Naked Domain</h2>
+
+<p>OpenShiftもHerokuと同じようにCNAMEでのカスタムドメイン設定しか出来ないので、aliasだけ設定しておく</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ rhc alias add anewcomer a-newcomer.com
+</code></pre></div></div>
+
+<p>あとはapex alias等の参照先を、最初に付与されたFQDN(anewcomer-daich.rhcloud.comとか)に設定すれば転送されるはず。</p>
+
+<h2 id="action-hook">Action Hook</h2>
+
+<p>最後に、pushするたびに自動的にmigrationを実行させたいので実行権限付きのファイルを.openshift/action_hooks/deployに置く。</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">#!/bin/bash</span>
+
+<span class="nb">echo</span> <span class="s2">"Starting deploy script"</span>
+<span class="nb">cd</span> <span class="nv">$OPENSHIFT_REPO_DIR</span>
+
+bundle <span class="nb">exec </span>rake db:migrate <span class="nv">RACK_ENV</span><span class="o">=</span><span class="s2">"production"</span>
+</code></pre></div></div>
+
+<p>他にも色々なActionが用意されてるので大抵のことはカバーできそう。</p>
+
+<h2 id="終わり">終わり</h2>
+
+<p>結構調べながらやってたんだけどそこそこスムーズに移行できてよかった。
+OpenShiftも個人でブログを動かすくらいにしか使っていない分の使い勝手は全く問題ないと思う。</p>
+
+<p>ただ、ブログに対してアプリケーションを動かすこと自体がちょっとめんどくさくなってしまって今はGithub Pages + Jekyllで運用しているんだけど、こうやってちょっと頑張って移行した手前そのうち向こうのブログにも何か書いていきたい。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/posts/2015-11-30-heroku-to-openshift/top.png" /><media:content medium="image" url="https://daichi.dev/assets/images/posts/2015-11-30-heroku-to-openshift/top.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">ActiveRecord Connection</title><link href="https://daichi.dev/posts/2015-11-19-activerecord-connection" rel="alternate" type="text/html" title="ActiveRecord Connection" /><published>2015-11-19T00:00:00+09:00</published><updated>2015-11-19T00:00:00+09:00</updated><id>https://daichi.dev/posts/activerecord-connection</id><content type="html" xml:base="https://daichi.dev/posts/2015-11-19-activerecord-connection"><![CDATA[<p>ActiveRecordのShardingライブラリを設計する際に、対応する必要があるコネクション管理と実際にコネクションがどのように使用されているのかの部分について書き留めておく。
+対象のバージョンは4.2.4だけど4系なら大体同じなので問題ないと思う。</p>
+
+<p>データベースへの接続はinitializerで行われる。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/railtie.rb</span>
+
+<span class="n">initializer</span> <span class="s2">"active_record.initialize_database"</span> <span class="k">do</span> <span class="o">|</span><span class="n">app</span><span class="o">|</span>
+  <span class="no">ActiveSupport</span><span class="p">.</span><span class="nf">on_load</span><span class="p">(</span><span class="ss">:active_record</span><span class="p">)</span> <span class="k">do</span>
+    <span class="nb">self</span><span class="p">.</span><span class="nf">configurations</span> <span class="o">=</span> <span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">database_configuration</span>
+
+    <span class="k">begin</span>
+      <span class="n">establish_connection</span>
+    <span class="k">rescue</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">NoDatabaseError</span>
+      <span class="nb">warn</span> <span class="o">&lt;&lt;-</span><span class="no">end_warning</span><span class="sh">
+Oops - You have a database configured, but it doesn't exist yet!
+
+Here's how to get started:
+
+  1. Configure your database in config/database.yml.
+  2. Run `bin/rake db:create` to create the database.
+  3. Run `bin/rake db:setup` to load your database schema.
+</span><span class="no">end_warning</span>
+      <span class="k">raise</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<h2 id="establish_connection">#establish_connection</h2>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/connection_handling.rb</span>
+
+<span class="k">def</span> <span class="nf">establish_connection</span><span class="p">(</span><span class="n">spec</span> <span class="o">=</span> <span class="kp">nil</span><span class="p">)</span>
+  <span class="n">spec</span>     <span class="o">||=</span> <span class="no">DEFAULT_ENV</span><span class="p">.</span><span class="nf">call</span><span class="p">.</span><span class="nf">to_sym</span>
+  <span class="n">resolver</span> <span class="o">=</span>   <span class="no">ConnectionAdapters</span><span class="o">::</span><span class="no">ConnectionSpecification</span><span class="o">::</span><span class="no">Resolver</span><span class="p">.</span><span class="nf">new</span> <span class="n">configurations</span>
+  <span class="n">spec</span>     <span class="o">=</span>   <span class="n">resolver</span><span class="p">.</span><span class="nf">spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+
+  <span class="k">unless</span> <span class="nb">respond_to?</span><span class="p">(</span><span class="n">spec</span><span class="p">.</span><span class="nf">adapter_method</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="no">AdapterNotFound</span><span class="p">,</span> <span class="s2">"database configuration specifies nonexistent </span><span class="si">#{</span><span class="n">spec</span><span class="p">.</span><span class="nf">config</span><span class="p">[</span><span class="ss">:adapter</span><span class="p">]</span><span class="si">}</span><span class="s2"> adapter"</span>
+  <span class="k">end</span>
+
+  <span class="n">remove_connection</span>
+  <span class="n">connection_handler</span><span class="p">.</span><span class="nf">establish_connection</span> <span class="nb">self</span><span class="p">,</span> <span class="n">spec</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>spec周りの処理は本質とは関係ないのでざっくりとした理解で問題ない。environment、Hash、URL(String)のどれかを受け取りHashに展開し直す。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/connection_adapters/abstract/connection_pool.rb</span>
+
+<span class="c1"># ActiveRecord::ConnectionAdapters::ConnectionHandler</span>
+<span class="k">def</span> <span class="nf">establish_connection</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span>
+  <span class="vi">@class_to_pool</span><span class="p">.</span><span class="nf">clear</span>
+  <span class="k">raise</span> <span class="no">RuntimeError</span><span class="p">,</span> <span class="s2">"Anonymous class is not allowed."</span> <span class="k">unless</span> <span class="n">owner</span><span class="p">.</span><span class="nf">name</span>
+  <span class="n">owner_to_pool</span><span class="p">[</span><span class="n">owner</span><span class="p">.</span><span class="nf">name</span><span class="p">]</span> <span class="o">=</span> <span class="no">ConnectionAdapters</span><span class="o">::</span><span class="no">ConnectionPool</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>owner_to_poolの実装は<code class="language-plaintext highlighter-rouge">@owner_to_pool[Process.pid]</code>になっていて、代入の結果以下の構造になる。
+(@owner_to_poolは実際にはThreadSafe::Cacheのインスタンスだが、Hashのように振る舞う)</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>{ 71941 =&gt; { "ActiveRecord::Base" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt; } }
+</code></pre></div></div>
+
+<p>プロセスID毎に、establish_connectionを実行したクラス名 =&gt; プールのHash構造になっている。プロセスごとに保持している理由はforkへの対応。
+クラスオブジェクト自身ではなくクラス名がkeyになっている理由は、
+development modeでクラス再読み込みするのでクラスオブジェクトをそのまま使用していると参照が消えずリークしてしまうから。</p>
+
+<p>それを踏まえ、Railsを起動直後のConnectionHandlerの構造は以下になる。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>#&lt;ActiveRecord::ConnectionAdapters::ConnectionHandler:0x007f835c5da700
+  @class_to_pool=
+    #&lt;ThreadSafe::Cache:0x007f835c5da5e8
+      @backend=
+        { 71941 =&gt;
+          #&lt;ThreadSafe::Cache:0x007f835c6033a8
+            @backend=
+              { "ActiveRecord::Base" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt; }
+            @default_proc=nil&gt; },
+      @default_proc=#&lt;Proc:...&gt;&gt;,
+  @owner_to_pool=
+    #&lt;ThreadSafe::Cache:0x007f835c5da6b0
+      @backend=
+        { 71941 =&gt;
+          #&lt;ThreadSafe::Cache:0x007f835c4ba0f0
+            @backend=
+              { "ActiveRecord::Base" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt; },
+            @default_proc=nil&gt; },
+      @default_proc=#&lt;Proc:...&gt;&gt;
+</code></pre></div></div>
+
+<p>@class_to_poolに関しては、Modelがコネクションを取得する際に使用するプールを特定するためのキャッシュなのでここでは見ない。</p>
+
+<p>データベースにはこの段階では接続せずコネクションプールを初期するだけで、
+コネクションが必要になった段階で接続するように遅延処理されている。</p>
+
+<h2 id="connection">#connection</h2>
+
+<p>実際にデータベースに接続されるのはconnectionを読んだタイミング。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/connection_handling.rb</span>
+
+<span class="k">def</span> <span class="nf">connection</span>
+  <span class="n">retrieve_connection</span>
+<span class="k">end</span>
+
+<span class="k">def</span> <span class="nf">retrieve_connection</span>
+  <span class="n">connection_handler</span><span class="p">.</span><span class="nf">retrieve_connection</span><span class="p">(</span><span class="nb">self</span><span class="p">)</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/connection_adapters/abstract/connection_pool.rb</span>
+
+<span class="c1"># ActiveRecord::ConnectionAdapters::ConnectionHandler</span>
+<span class="k">def</span> <span class="nf">retrieve_connection</span><span class="p">(</span><span class="n">klass</span><span class="p">)</span> <span class="c1">#:nodoc:</span>
+  <span class="n">pool</span> <span class="o">=</span> <span class="n">retrieve_connection_pool</span><span class="p">(</span><span class="n">klass</span><span class="p">)</span>
+  <span class="k">raise</span> <span class="no">ConnectionNotEstablished</span><span class="p">,</span> <span class="s2">"No connection pool for </span><span class="si">#{</span><span class="n">klass</span><span class="si">}</span><span class="s2">"</span> <span class="k">unless</span> <span class="n">pool</span>
+  <span class="n">conn</span> <span class="o">=</span> <span class="n">pool</span><span class="p">.</span><span class="nf">connection</span>
+  <span class="k">raise</span> <span class="no">ConnectionNotEstablished</span><span class="p">,</span> <span class="s2">"No connection for </span><span class="si">#{</span><span class="n">klass</span><span class="si">}</span><span class="s2"> in connection pool"</span> <span class="k">unless</span> <span class="n">conn</span>
+  <span class="n">conn</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>それぞれがちょっとした処理になってるので2つに分けて見ていく。</p>
+
+<h4 id="retrieve_connection_poolklass">retrieve_connection_pool(klass)</h4>
+
+<p>klassに対応するpoolを取得する。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">retrieve_connection_pool</span><span class="p">(</span><span class="n">klass</span><span class="p">)</span>
+  <span class="n">class_to_pool</span><span class="p">[</span><span class="n">klass</span><span class="p">.</span><span class="nf">name</span><span class="p">]</span> <span class="o">||=</span> <span class="k">begin</span>
+    <span class="k">until</span> <span class="n">pool</span> <span class="o">=</span> <span class="n">pool_for</span><span class="p">(</span><span class="n">klass</span><span class="p">)</span>
+      <span class="n">klass</span> <span class="o">=</span> <span class="n">klass</span><span class="p">.</span><span class="nf">superclass</span>
+      <span class="k">break</span> <span class="k">unless</span> <span class="n">klass</span> <span class="o">&lt;=</span> <span class="no">Base</span>
+    <span class="k">end</span>
+
+    <span class="n">class_to_pool</span><span class="p">[</span><span class="n">klass</span><span class="p">.</span><span class="nf">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pool</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>class_to_poolの実装は<code class="language-plaintext highlighter-rouge">@class_to_pool[Process.pid]</code>になっていて、代入の結果以下の構造になる。
+(@class_to_poolは実際にはThreadSafe::Cacheのインスタンスだが、Hashのように振る舞う)</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>{ 71941 =&gt; { "ActiveRecord::Base" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt;,
+             "MyModel" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt; } }
+</code></pre></div></div>
+
+<p>先ほどのowner_to_poolと似ているが役割が異なっている。
+owner_to_poolはプールを所持している(establish_connectionを実行した)クラスを管理している。
+class_to_poolはクラスが使用するプールを管理している。プールを所持していない場合、
+親クラスが所持するプールを使用するので分けて管理している。</p>
+
+<p>実装は、class_to_pool[klass.name]が存在しない場合にpool_for(klass)でクラスが所持するプールの取得を試みる。
+プールを所持していなければActiveRecord::Baseまで親クラスをたどり続ける。継承関係にあるクラスが明示的にestablish_connectionを呼ばない限り、
+親クラスのコネクションを共有するのはこの処理のおかげである。</p>
+
+<p>ちなみにclass_to_poolはキャッシュなので、新規にestablish_connectionが呼ばれた際にはclearされる。
+establish_connectionが呼ばれた瞬間から、既にキャッシュされているクラスが違うプールを使用する可能性があるから。</p>
+
+<p>pool_forの実装は以下になっている。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">pool_for</span><span class="p">(</span><span class="n">owner</span><span class="p">)</span>
+  <span class="n">owner_to_pool</span><span class="p">.</span><span class="nf">fetch</span><span class="p">(</span><span class="n">owner</span><span class="p">.</span><span class="nf">name</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="n">ancestor_pool</span> <span class="o">=</span> <span class="n">pool_from_any_process_for</span><span class="p">(</span><span class="n">owner</span><span class="p">)</span>
+      <span class="c1"># A connection was established in an ancestor process that must have</span>
+      <span class="c1"># subsequently forked. We can't reuse the connection, but we can copy</span>
+      <span class="c1"># the specification and establish a new connection with it.</span>
+      <span class="n">establish_connection</span> <span class="n">owner</span><span class="p">,</span> <span class="n">ancestor_pool</span><span class="p">.</span><span class="nf">spec</span>
+    <span class="k">else</span>
+      <span class="n">owner_to_pool</span><span class="p">[</span><span class="n">owner</span><span class="p">.</span><span class="nf">name</span><span class="p">]</span> <span class="o">=</span> <span class="kp">nil</span>
+    <span class="k">end</span>
+  <span class="p">}</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>owner_to_poolのkeyが存在するのは下記の2パターン。</p>
+
+<ul>
+  <li>明示的にestablish_connectionを呼ばれた</li>
+  <li>既に一度引数としてownerが渡されている</li>
+</ul>
+
+<p>pool_from_any_process_for(owner)は@owner_to_pool全体からowner.nameに対応するプールを探す。
+プールが存在する場合、別プロセス(親プロセス)でプールを生成していたということになる。
+つまりコメントの通りで、forkされてたら(子プロセスなら)親のプールのspecを元に再接続している。</p>
+
+<p>そして得られたプールを<code class="language-plaintext highlighter-rouge">class_to_pool[klass.name] = pool</code>でキャッシュにセットしている。
+プールがない場合にnilをセットしているのは2回目以降この処理を行わないため。</p>
+
+<h4 id="poolconnection">pool.connection</h4>
+
+<p>@reserved_connections[current_connection_id]に取得済みのコネクションがなければcheckoutしている。
+checkoutはpoolからコネクションを(余っていれば)取得する処理。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">connection</span>
+  <span class="c1"># this is correctly done double-checked locking</span>
+  <span class="c1"># (ThreadSafe::Cache's lookups have volatile semantics)</span>
+  <span class="vi">@reserved_connections</span><span class="p">[</span><span class="n">current_connection_id</span><span class="p">]</span> <span class="o">||</span> <span class="n">synchronize</span> <span class="k">do</span>
+    <span class="vi">@reserved_connections</span><span class="p">[</span><span class="n">current_connection_id</span><span class="p">]</span> <span class="o">||=</span> <span class="n">checkout</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>@reserved_connectionsもThreadSafe::Cacheのインスタンスだ。チェックアウトされたコネクションはスレッドごとに保持されているため、その他のスレッドからは使用されないという仕組みだ。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">checkout</span>
+  <span class="n">synchronize</span> <span class="k">do</span>
+    <span class="n">conn</span> <span class="o">=</span> <span class="n">acquire_connection</span>
+    <span class="n">conn</span><span class="p">.</span><span class="nf">lease</span>
+    <span class="n">checkout_and_verify</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>checkoutの処理は、3段階に別れる。</p>
+
+<ul>
+  <li>acquire_connection</li>
+</ul>
+
+<p>コネクション取得処理。中身の処理の内容は</p>
+
+<ol>
+  <li>利用可能なコネクションのキューからをコネクションを取得</li>
+  <li>(1で取得出来なかった場合) プール上限に達していなければ新規コネクション作成</li>
+  <li>(2でプール上限に達してた場合) timeout付きで再度キューから取得できるのを待つ。だめなら例外</li>
+</ol>
+
+<p>となる。</p>
+
+<ul>
+  <li>conn.lease</li>
+</ul>
+
+<p>自身のスレッドをコネクションのownerにする。
+acquire_connectionの3.でコネクションが足りていない場合、すでに終了しているスレッドが確保しているコネクションを回収する処理があってその時のためにセットされている。</p>
+
+<ul>
+  <li>checkout_and_verify(conn)</li>
+</ul>
+
+<p>コネクションがactiveかどうかを判定し、activeではない場合には再接続を試みる。
+activeかどうかの実装はadapter毎に定義されている(mysql2はpingを投げてる)。
+再接続だめそうならプールからコネクションを削除して例外を投げる。</p>
+
+<p>それぞれの実装詳細は面倒くさいので、ここから先は自分の目で確かめよう！</p>
+
+<p>つまり、あるプロセスが最低限１つ持っているプールをそれぞれのスレッドで取り合っている仕組みになっている。
+そのため、unicorn等のプロセスモデルのサーバーなら余り関係のない話だしpumaのようなスレッドモデルのサーバーならプールの調整が大切なのである。</p>
+
+<p>これらの仕組みを元に、既存のライブラリがどのようにしてShardingを実現しているかはまた次回。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[ActiveRecordのShardingライブラリを設計する際に、対応する必要があるコネクション管理と実際にコネクションがどのように使用されているのかの部分について書き留めておく。 対象のバージョンは4.2.4だけど4系なら大体同じなので問題ないと思う。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">passengerがaptでインストール出来ない</title><link href="https://daichi.dev/posts/2015-06-22-passenger-apt" rel="alternate" type="text/html" title="passengerがaptでインストール出来ない" /><published>2015-06-22T00:00:00+09:00</published><updated>2015-06-22T00:00:00+09:00</updated><id>https://daichi.dev/posts/passenger-apt</id><content type="html" xml:base="https://daichi.dev/posts/2015-06-22-passenger-apt"><![CDATA[<p>Ubuntu14.04でpassengerをインストールしようとしたらエラーが出た。</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>vagrant@vagrant-ubuntu-trusty-64:~<span class="nv">$ </span><span class="nb">sudo </span>apt-get <span class="nb">install</span> <span class="nt">-y</span> nginx-extras passenger
+Reading package lists... Done
+Building dependency tree
+Reading state information... Done
+The following extra packages will be installed:
+  fontconfig-config fonts-dejavu-core libfontconfig1 libgd3 libjbig0
+  libjpeg-turbo8 libjpeg8 liblua5.1-0 libperl5.18 libtiff5 libvpx1
+  nginx-common passenger-dev passenger-doc
+Suggested packages:
+  libgd-tools fcgiwrap nginx-doc ssl-cert
+The following NEW packages will be installed:
+  fontconfig-config fonts-dejavu-core libfontconfig1 libgd3 libjbig0
+  libjpeg-turbo8 libjpeg8 liblua5.1-0 libperl5.18 libtiff5 libvpx1
+  nginx-common nginx-extras passenger passenger-dev passenger-doc
+0 upgraded, 16 newly installed, 0 to remove and 2 not upgraded.
+Need to get 6,695 kB/8,970 kB of archives.
+After this operation, 52.3 MB of additional disk space will be used.
+Get:1 https://oss-binaries.phusionpassenger.com/apt/passenger/ trusty/main nginx-common all 1:1.6.3-8.5.0.8~trusty1 <span class="o">[</span>36.3 kB]
+Err https://oss-binaries.phusionpassenger.com/apt/passenger/ trusty/main nginx-common all 1:1.6.3-8.5.0.8~trusty1
+  HttpError500
+Err https://oss-binaries.phusionpassenger.com/apt/passenger/ trusty/main passenger amd64 1:5.0.8-1~trusty1
+  HttpError500
+Err https://oss-binaries.phusionpassenger.com/apt/passenger/ trusty/main passenger-dev amd64 1:5.0.8-1~trusty1
+  HttpError500
+Err https://oss-binaries.phusionpassenger.com/apt/passenger/ trusty/main passenger-doc all 1:5.0.8-1~trusty1
+  HttpError500
+Err https://oss-binaries.phusionpassenger.com/apt/passenger/ trusty/main nginx-extras amd64 1:1.6.3-8.5.0.8~trusty1
+  HttpError500
+E: Failed to fetch https://oss-binaries.phusionpassenger.com/apt/passenger/pool/trusty/main/n/nginx/nginx-common_1.6.3-8.5.0.8~trusty1_all.deb  HttpError500
+
+E: Failed to fetch https://oss-binaries.phusionpassenger.com/apt/passenger/pool/trusty/main/p/passenger/passenger_5.0.8-1~trusty1_amd64.deb  HttpError500
+
+E: Failed to fetch https://oss-binaries.phusionpassenger.com/apt/passenger/pool/trusty/main/p/passenger/passenger-dev_5.0.8-1~trusty1_amd64.deb  HttpError500
+
+E: Failed to fetch https://oss-binaries.phusionpassenger.com/apt/passenger/pool/trusty/main/p/passenger/passenger-doc_5.0.8-1~trusty1_all.deb  HttpError500
+
+E: Failed to fetch https://oss-binaries.phusionpassenger.com/apt/passenger/pool/trusty/main/n/nginx/nginx-extras_1.6.3-8.5.0.8~trusty1_amd64.deb  HttpError500
+
+E: Unable to fetch some archives, maybe run apt-get update or try with <span class="nt">--fix-missing</span>?
+</code></pre></div></div>
+
+<p><a href="https://blog.phusion.nl/2015/03/08/passenger-4-apt-repository-now-available/">passenger5の公開に伴ってリポジトリが変わった</a>らしい。が、公式のドキュメントも変更されてないし既存の広く使われているリポジトリに対するこういう変更は辛みしか無いんじゃないだろうか。OSS版はsource.listに</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>deb https://oss-binaries.phusionpassenger.com/apt/passenger/4 &lt;CODENAME&gt; main
+</code></pre></div></div>
+
+<p>を指定すれば良いとのこと。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[Ubuntu14.04でpassengerをインストールしようとしたらエラーが出た。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry></feed>
