@@ -2,7 +2,7 @@
 title: ActiveRecord Sharding
 ---
 
-[前回](/2015/11/19/activerecord-connection/)の続き
+[前回](/posts/2015-11-19-activerecord-connection)の続き
 
 ActiveRecordが実際にDBにクエリを発行する場合`ActiveRecord::Base.connection`を経由する。話を単純にする為に、クエリの実行だけに限定してShardingを実現しようと思った場合このメソッドがそれぞれのShardに対して確立されたコネクションを返せば良い。
 
