@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="ja_JP"><generator uri="https://jekyllrb.com/" version="4.3.1">Jekyll</generator><link href="https://daichi.dev/feed.xml" rel="self" type="application/atom+xml" /><link href="https://daichi.dev/" rel="alternate" type="text/html" hreflang="ja_JP" /><updated>2022-12-28T02:28:01+09:00</updated><id>https://daichi.dev/feed.xml</id><title type="html">daichi.dev</title><subtitle>プログラミングや日々開発してる上で感じた事、日常について書いています。</subtitle><entry><title type="html">なぜ今またブログを書き始めるのか</title><link href="https://daichi.dev/posts/2022-12-27-blog-is-back" rel="alternate" type="text/html" title="なぜ今またブログを書き始めるのか" /><published>2022-12-27T00:00:00+09:00</published><updated>2022-12-27T00:00:00+09:00</updated><id>https://daichi.dev/posts/blog-is-back</id><content type="html" xml:base="https://daichi.dev/posts/2022-12-27-blog-is-back"><![CDATA[<p>ブログのような物を書かなくなってもう随分になる。人は仕事や現状に満足するとどんどんブログを書かなくなってしまうと昔誰かが言っていたけどその通りで、自分の場合は子供が生まれた事で子育てに追われる充実感や仕事上の役職やお賃金が上がりプログラマとしてのプレゼンスの向上に執着しなくなっていったというような実感がある。</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="ja_JP"><generator uri="https://jekyllrb.com/" version="4.3.1">Jekyll</generator><link href="https://daichi.dev/feed.xml" rel="self" type="application/atom+xml" /><link href="https://daichi.dev/" rel="alternate" type="text/html" hreflang="ja_JP" /><updated>2022-12-28T13:43:34+09:00</updated><id>https://daichi.dev/feed.xml</id><title type="html">daichi.dev</title><subtitle>プログラミングや日々開発してる上で感じた事、日常について書いています。</subtitle><entry><title type="html">なぜ今またブログを書き始めるのか</title><link href="https://daichi.dev/posts/2022-12-27-blog-is-back" rel="alternate" type="text/html" title="なぜ今またブログを書き始めるのか" /><published>2022-12-27T00:00:00+09:00</published><updated>2022-12-27T00:00:00+09:00</updated><id>https://daichi.dev/posts/blog-is-back</id><content type="html" xml:base="https://daichi.dev/posts/2022-12-27-blog-is-back"><![CDATA[<p>ブログのような物を書かなくなってもう随分になる。人は仕事や現状に満足するとどんどんブログを書かなくなってしまうと昔誰かが言っていたけどその通りで、自分の場合は子供が生まれた事で子育てに追われる充実感や仕事上の役職やお賃金が上がりプログラマとしてのプレゼンスの向上に執着しなくなっていったというような実感がある。</p>
 
 <p>昔は別にブログという形でアウトプットがなくても仕事で使う場面は多く、例えばファイルシステムやプロセスやネットワーク周りの知識とかカーネルチューニングの方法などは覚えてすぐに活用する機会が沢山あった。今ではコンテナ化してしまって直接触ることが随分と減ってしまったような部分の知識は思ってる以上に容赦なく大量に失われていっている実感がある。今使っていなくて失われていっているのは淘汰されて消えていく運命にある知識も沢山あるのでまあ良いのだけど、基礎となる知識は知っているか知らないかで大きく差が出る瞬間が絶対にある知識なので、今使わないから忘れちゃってヨシ！とはならないよなぁというぼんやりとした不安を最近はずっと抱えていた。</p>
 
@@ -430,7 +430,114 @@ ok  	github.com/lestrrat/go-fluent-client	10.610s
 
 <h2 id="終わり">終わり</h2>
 
-<p>最近 Go を全然書いていないので久しぶりに触る機会で来て楽しかった。おわり。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[この記事はGo4 Advent Calendar 2017の12/15のエントリです。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">ElasticsearchとGCPのTCP Keepaliveではまった話</title><link href="https://daichi.dev/posts/2016-05-02-gcp-elasticsearch-tcp-keepalive" rel="alternate" type="text/html" title="ElasticsearchとGCPのTCP Keepaliveではまった話" /><published>2016-05-02T00:00:00+09:00</published><updated>2016-05-02T00:00:00+09:00</updated><id>https://daichi.dev/posts/gcp-elasticsearch-tcp-keepalive</id><content type="html" xml:base="https://daichi.dev/posts/2016-05-02-gcp-elasticsearch-tcp-keepalive"><![CDATA[<p>今回はGCP上にElasticsearchクラスタを組もうとしてはまった話をします。ちゃんとドキュメント読めと言われればそこまでなんだけど、ミドルウェアが間に入ってて気づくのに遅れてしまった…。</p>
+<p>最近 Go を全然書いていないので久しぶりに触る機会で来て楽しかった。おわり。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[この記事はGo4 Advent Calendar 2017の12/15のエントリです。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">Circuit Breaker</title><link href="https://daichi.dev/posts/2017-03-21-circuit-breaker" rel="alternate" type="text/html" title="Circuit Breaker" /><published>2017-03-21T00:00:00+09:00</published><updated>2017-03-21T00:00:00+09:00</updated><id>https://daichi.dev/posts/circuit-breaker</id><content type="html" xml:base="https://daichi.dev/posts/2017-03-21-circuit-breaker"><![CDATA[<p>データ送信処理が失敗した場合に、リトライの間隔を指数関数的に伸ばしていくことで最終的に処理を完結させるためのアルゴリズムとしてExponential Backoffというものがある。AWSのSDKなどで実際に触ったことがある人も多いと思うけど、実装が単純でそれなりに大規模な環境でも効果的に動く。ジッターなどは抜きに簡易化して書くと次の様な感じでしょうか。</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">MAX_RETRIES</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">retries</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="k">begin</span>
+    <span class="sr">//</span> <span class="err">何かの処理</span>
+<span class="k">rescue</span> <span class="o">=&gt;</span> <span class="n">e</span>
+  <span class="k">if</span> <span class="n">retries</span> <span class="o">&lt;</span> <span class="no">MAX_RETRIES</span>
+    <span class="n">retries</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="nb">sleep</span> <span class="mi">2</span> <span class="o">**</span> <span class="n">i</span>
+    <span class="k">retry</span>
+  <span class="k">else</span>
+    <span class="k">raise</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+
+</code></pre></div></div>
+
+<p>只、リトライを実行しているの間処理をブロックしても構わない場合や、並列度にある程度の上限がある場合(CLIのツールとか1処理に実行するAPIコール数が決まってる場合とか)はこれでも問題ないんだけど、ブロックするのは困る場合などにはリトライせず直ぐにエラーを返して貰いたいケースがある。</p>
+
+<p>というか今作ってるsocketにデータを書くライブラリで、一定数処理が失敗したらしばらくの間直ぐにエラーを返してほしくて、且つその間隔が指数関数的に伸びていくような物がほしいなと思う事があって、有りがちなケースだしパターン化されてないかなと思ったけどよくよく考えたらCircuit Breakerをそのまま使えそうとおもったらいい感じだった。</p>
+
+<h2 id="circuit-breakerとは">Circuit Breakerとは</h2>
+
+<p>私がCircuit Breakerを初めて見かけたのはNetfrixのHystrixというライブラリについて調べていた時だったと思う。</p>
+
+<p><a href="https://github.com/Netflix/Hystrix">Netflix/Hystrix</a></p>
+
+<p>その後、Martin Fowler先生の記事と、そこで紹介されてたRelease It!という本で詳細を知ったんだけど、初出がどこかはちょっとわからない。</p>
+
+<p><a href="https://martinfowler.com/bliki/CircuitBreaker.html">https://martinfowler.com/bliki/CircuitBreaker.html</a></p>
+
+<p><a href="https://www.amazon.co.jp/Release-本番用ソフトウェア製品の設計とデプロイのために-Michael-T-Nygard/dp/4274067491">Release-本番用ソフトウェア製品の設計とデプロイのために-Michael-T-Nygard</a></p>
+
+<p>どちらかと言うとマイクロサービスのコンテキストで語られることが多くて、複数サービス間で構築されたシステムにおいて、あるシステムに障害が発生した場合に名前の通りそのシステムを遮断して全体影響を抑える様な役割と、実行結果の成功や失敗のイベントを一箇所で管理して検知しやすくするための役割がある。Exponential Backoff などのように処理を再試行するための物ではなく、処理を実行させないようにするところに大きな違いがある。</p>
+
+<p>例えば、Webリクエストの処理内で外部の依存しているAPIをネットワーク経由で呼び出す場合に、ある１つの依存先サービスが疎通不能になった場合にリトライやタイムアウトするまで処理が遅延してしまい、連鎖的にシステム全体がダウンしてしまう事は極力避けたい。</p>
+
+<p><img src="/assets/images/posts/2017-03-21-circuit-breaker/image1.png" alt="" /></p>
+
+<p>そこで、各サービスへの通信クライアントの処理をCircuit Breakerを経由するようにして、閾値以上失敗が続いた場合には処理を実行せず、直ぐにエラーを返してサービスを一定期間遮断する。</p>
+
+<p><img src="/assets/images/posts/2017-03-21-circuit-breaker/image2.png" alt="" /></p>
+
+<p>遮断に関しては、例えば表示が少しおかしくなるのを許容するとかであれば、依存先のサービス失敗時の初期値やFallback方法を決めるなりすればいい。遮断すると維持出来ないサービスでも、Circuit Breakerには最初の図のように、システム全体がブロックすることによる過負荷を避ける目的もあるので、それなりにどういったシステムでも効果は出るように思う。</p>
+
+<p>APIの呼び出し以外にも、こういった問題は本当によくあって(例えばDBへのクエリとか)、Release It! の中でも結構同じような内容の話が安定性のアンチパターンとして書かれているので興味がある人は是非読んでみると良いと思う。</p>
+
+<h2 id="状態遷移とイベント監視">状態遷移とイベント監視</h2>
+
+<p>Circuit Breaker自体は結構単純で、内部に3つの状態を持った有限オートマトンである。</p>
+
+<ul>
+  <li>Closed
+    <ul>
+      <li>通常時はこの状態、処理は普通に実行される</li>
+      <li>処理が失敗した場合、エラー(数|率)が閾値を超えない場合Closed状態のまま</li>
+      <li>処理が失敗した場合、エラー(数|率)が閾値を超えた場合Open状態に移行する</li>
+    </ul>
+  </li>
+  <li>Open
+    <ul>
+      <li>全ての処理は実行されず即時エラーを返す</li>
+      <li>一定時間経過後、Half Open状態に移行する</li>
+    </ul>
+  </li>
+  <li>Half Open
+    <ul>
+      <li>処理が成功した場合、Closed状態に移行する</li>
+      <li>処理が失敗した場合、Open状態に移行する</li>
+    </ul>
+  </li>
+</ul>
+
+<p><img src="/assets/images/posts/2017-03-21-circuit-breaker/image3.png" alt="" /></p>
+
+<p>マイクロサービスの例で言うと、設定閾値以上のエラーレスポンスを受け取る或いはタイムアウトになるとOpen状態に遷移する。閾値はクライアント実装と設定次第で連続エラー数だったり直近の割合だったりする。</p>
+
+<p>Open状態で実行された処理は全て実行されずにエラーが返る。OpenからHalf Openには一定時間後に移行するが、Half Open状態での処理に失敗すると再度Open状態に移行する。その際に指数関数的に待機間隔が増えていく実装が多い。Half Open自体は使う側が意識することは殆どなく、どちらかというと待機時間の制御の為のステータスと言える。</p>
+
+<p>処理結果に合わせて内部でこれらの状態に遷移しており、状態が変わったときに外部に通知する手段を持つ。どういうインターフェースで通知を受け取れるかは実装次第だが、例えばGoの実装である <a href="https://github.com/rubyist/circuitbreaker">rubyist/circuitbreaker</a> では、Goらしくchannelでイベントを受け取れるようになっている。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// Creates a circuit breaker that will trip if the function fails 10 times</span>
+<span class="n">cb</span> <span class="o">:=</span> <span class="n">circuit</span><span class="o">.</span><span class="n">NewThresholdBreaker</span><span class="p">(</span><span class="m">10</span><span class="p">)</span>
+
+<span class="n">events</span> <span class="o">:=</span> <span class="n">cb</span><span class="o">.</span><span class="n">Subscribe</span><span class="p">()</span>
+<span class="k">go</span> <span class="k">func</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">{</span>
+    <span class="n">e</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="n">events</span>
+    <span class="c">// Monitor breaker events like BreakerTripped, BreakerReset, BreakerFail, BreakerReady</span>
+  <span class="p">}</span>
+<span class="p">}()</span>
+
+<span class="n">cb</span><span class="o">.</span><span class="n">Call</span><span class="p">(</span><span class="k">func</span><span class="p">()</span> <span class="kt">error</span> <span class="p">{</span>
+	<span class="c">// This is where you'll do some remote call</span>
+	<span class="c">// If it fails, return an error</span>
+<span class="p">},</span> <span class="m">0</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>こうやって、一箇所で状態を監視できるようになることがもう一つのメリットで、例えばHystrixなんかでは専用のDashboardが用意されていたりもする。</p>
+
+<h2 id="おわり">おわり</h2>
+
+<p>マイクロサービスの例で色々と紹介してきたが、基本的には通信を伴う処理全般で使用することが出来る。今書いているライブラリはGoのgo routineベースのfluent-loggerで、fluentdへのコネクションにwriteする部分で使っている。</p>
+
+<p><a href="https://github.com/daichirata/fluent-logger-go/blob/master/logger.go#L148">https://github.com/daichirata/fluent-logger-go/blob/master/logger.go#L148</a></p>
+
+<p>待機期間が存在するため応答性とのトレードオフが多少あるけど、Circuit Breakerが起動するのはそもそも障害なりで接続が出来なくなっている状態なので問題ないケースも多いかなと思う。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[データ送信処理が失敗した場合に、リトライの間隔を指数関数的に伸ばしていくことで最終的に処理を完結させるためのアルゴリズムとしてExponential Backoffというものがある。AWSのSDKなどで実際に触ったことがある人も多いと思うけど、実装が単純でそれなりに大規模な環境でも効果的に動く。ジッターなどは抜きに簡易化して書くと次の様な感じでしょうか。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/posts/2017-03-21-circuit-breaker/image1.png" /><media:content medium="image" url="https://daichi.dev/assets/images/posts/2017-03-21-circuit-breaker/image1.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">ElasticsearchとGCPのTCP Keepaliveではまった話</title><link href="https://daichi.dev/posts/2016-05-02-gcp-elasticsearch-tcp-keepalive" rel="alternate" type="text/html" title="ElasticsearchとGCPのTCP Keepaliveではまった話" /><published>2016-05-02T00:00:00+09:00</published><updated>2016-05-02T00:00:00+09:00</updated><id>https://daichi.dev/posts/gcp-elasticsearch-tcp-keepalive</id><content type="html" xml:base="https://daichi.dev/posts/2016-05-02-gcp-elasticsearch-tcp-keepalive"><![CDATA[<p>今回はGCP上にElasticsearchクラスタを組もうとしてはまった話をします。ちゃんとドキュメント読めと言われればそこまでなんだけど、ミドルウェアが間に入ってて気づくのに遅れてしまった…。</p>
 
 <h2 id="tldr">TL;DR</h2>
 
@@ -1416,7 +1523,7 @@ irb<span class="o">(</span>main<span class="o">)</span>:001:0&gt; Rust.new.fib<s
 <span class="p">}</span>
 </code></pre></div></div>
 
-<p>後は、externの前の行に<code class="language-plaintext highlighter-rouge">#[link(name = "ruby")]</code>と書けば<code class="language-plaintext highlighter-rouge">cargo build</code>でビルドできる。ただ、librubyにリンクされていて依存関係がある所だけ注意しておいたほうがいい。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[この記事は Rust Advent Calendar 2015 10日目の記事です。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">ActiveRecord Sharding</title><link href="https://daichi.dev/posts/2015-12-01-activerecord-sharding" rel="alternate" type="text/html" title="ActiveRecord Sharding" /><published>2015-12-01T00:00:00+09:00</published><updated>2015-12-01T00:00:00+09:00</updated><id>https://daichi.dev/posts/activerecord-sharding</id><content type="html" xml:base="https://daichi.dev/posts/2015-12-01-activerecord-sharding"><![CDATA[<p><a href="/2015/11/19/activerecord-connection/">前回</a>の続き</p>
+<p>後は、externの前の行に<code class="language-plaintext highlighter-rouge">#[link(name = "ruby")]</code>と書けば<code class="language-plaintext highlighter-rouge">cargo build</code>でビルドできる。ただ、librubyにリンクされていて依存関係がある所だけ注意しておいたほうがいい。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[この記事は Rust Advent Calendar 2015 10日目の記事です。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">ActiveRecord Sharding</title><link href="https://daichi.dev/posts/2015-12-01-activerecord-sharding" rel="alternate" type="text/html" title="ActiveRecord Sharding" /><published>2015-12-01T00:00:00+09:00</published><updated>2015-12-01T00:00:00+09:00</updated><id>https://daichi.dev/posts/activerecord-sharding</id><content type="html" xml:base="https://daichi.dev/posts/2015-12-01-activerecord-sharding"><![CDATA[<p><a href="/posts/2015-11-19-activerecord-connection">前回</a>の続き</p>
 
 <p>ActiveRecordが実際にDBにクエリを発行する場合<code class="language-plaintext highlighter-rouge">ActiveRecord::Base.connection</code>を経由する。話を単純にする為に、クエリの実行だけに限定してShardingを実現しようと思った場合このメソッドがそれぞれのShardに対して確立されたコネクションを返せば良い。</p>
 
@@ -2001,256 +2108,4 @@ bundle <span class="nb">exec </span>rake db:migrate <span class="nv">RACK_ENV</s
 <p>結構調べながらやってたんだけどそこそこスムーズに移行できてよかった。
 OpenShiftも個人でブログを動かすくらいにしか使っていない分の使い勝手は全く問題ないと思う。</p>
 
-<p>ただ、ブログに対してアプリケーションを動かすこと自体がちょっとめんどくさくなってしまって今はGithub Pages + Jekyllで運用しているんだけど、こうやってちょっと頑張って移行した手前そのうち向こうのブログにも何か書いていきたい。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/posts/2015-11-30-heroku-to-openshift/top.png" /><media:content medium="image" url="https://daichi.dev/assets/images/posts/2015-11-30-heroku-to-openshift/top.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">ActiveRecord Connection</title><link href="https://daichi.dev/posts/2015-11-19-activerecord-connection" rel="alternate" type="text/html" title="ActiveRecord Connection" /><published>2015-11-19T00:00:00+09:00</published><updated>2015-11-19T00:00:00+09:00</updated><id>https://daichi.dev/posts/activerecord-connection</id><content type="html" xml:base="https://daichi.dev/posts/2015-11-19-activerecord-connection"><![CDATA[<p>ActiveRecordのShardingライブラリを設計する際に、対応する必要があるコネクション管理と実際にコネクションがどのように使用されているのかの部分について書き留めておく。
-対象のバージョンは4.2.4だけど4系なら大体同じなので問題ないと思う。</p>
-
-<p>データベースへの接続はinitializerで行われる。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/railtie.rb</span>
-
-<span class="n">initializer</span> <span class="s2">"active_record.initialize_database"</span> <span class="k">do</span> <span class="o">|</span><span class="n">app</span><span class="o">|</span>
-  <span class="no">ActiveSupport</span><span class="p">.</span><span class="nf">on_load</span><span class="p">(</span><span class="ss">:active_record</span><span class="p">)</span> <span class="k">do</span>
-    <span class="nb">self</span><span class="p">.</span><span class="nf">configurations</span> <span class="o">=</span> <span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">database_configuration</span>
-
-    <span class="k">begin</span>
-      <span class="n">establish_connection</span>
-    <span class="k">rescue</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">NoDatabaseError</span>
-      <span class="nb">warn</span> <span class="o">&lt;&lt;-</span><span class="no">end_warning</span><span class="sh">
-Oops - You have a database configured, but it doesn't exist yet!
-
-Here's how to get started:
-
-  1. Configure your database in config/database.yml.
-  2. Run `bin/rake db:create` to create the database.
-  3. Run `bin/rake db:setup` to load your database schema.
-</span><span class="no">end_warning</span>
-      <span class="k">raise</span>
-    <span class="k">end</span>
-  <span class="k">end</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<h2 id="establish_connection">#establish_connection</h2>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/connection_handling.rb</span>
-
-<span class="k">def</span> <span class="nf">establish_connection</span><span class="p">(</span><span class="n">spec</span> <span class="o">=</span> <span class="kp">nil</span><span class="p">)</span>
-  <span class="n">spec</span>     <span class="o">||=</span> <span class="no">DEFAULT_ENV</span><span class="p">.</span><span class="nf">call</span><span class="p">.</span><span class="nf">to_sym</span>
-  <span class="n">resolver</span> <span class="o">=</span>   <span class="no">ConnectionAdapters</span><span class="o">::</span><span class="no">ConnectionSpecification</span><span class="o">::</span><span class="no">Resolver</span><span class="p">.</span><span class="nf">new</span> <span class="n">configurations</span>
-  <span class="n">spec</span>     <span class="o">=</span>   <span class="n">resolver</span><span class="p">.</span><span class="nf">spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
-
-  <span class="k">unless</span> <span class="nb">respond_to?</span><span class="p">(</span><span class="n">spec</span><span class="p">.</span><span class="nf">adapter_method</span><span class="p">)</span>
-    <span class="k">raise</span> <span class="no">AdapterNotFound</span><span class="p">,</span> <span class="s2">"database configuration specifies nonexistent </span><span class="si">#{</span><span class="n">spec</span><span class="p">.</span><span class="nf">config</span><span class="p">[</span><span class="ss">:adapter</span><span class="p">]</span><span class="si">}</span><span class="s2"> adapter"</span>
-  <span class="k">end</span>
-
-  <span class="n">remove_connection</span>
-  <span class="n">connection_handler</span><span class="p">.</span><span class="nf">establish_connection</span> <span class="nb">self</span><span class="p">,</span> <span class="n">spec</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>spec周りの処理は本質とは関係ないのでざっくりとした理解で問題ない。environment、Hash、URL(String)のどれかを受け取りHashに展開し直す。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/connection_adapters/abstract/connection_pool.rb</span>
-
-<span class="c1"># ActiveRecord::ConnectionAdapters::ConnectionHandler</span>
-<span class="k">def</span> <span class="nf">establish_connection</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span>
-  <span class="vi">@class_to_pool</span><span class="p">.</span><span class="nf">clear</span>
-  <span class="k">raise</span> <span class="no">RuntimeError</span><span class="p">,</span> <span class="s2">"Anonymous class is not allowed."</span> <span class="k">unless</span> <span class="n">owner</span><span class="p">.</span><span class="nf">name</span>
-  <span class="n">owner_to_pool</span><span class="p">[</span><span class="n">owner</span><span class="p">.</span><span class="nf">name</span><span class="p">]</span> <span class="o">=</span> <span class="no">ConnectionAdapters</span><span class="o">::</span><span class="no">ConnectionPool</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>owner_to_poolの実装は<code class="language-plaintext highlighter-rouge">@owner_to_pool[Process.pid]</code>になっていて、代入の結果以下の構造になる。
-(@owner_to_poolは実際にはThreadSafe::Cacheのインスタンスだが、Hashのように振る舞う)</p>
-
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>{ 71941 =&gt; { "ActiveRecord::Base" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt; } }
-</code></pre></div></div>
-
-<p>プロセスID毎に、establish_connectionを実行したクラス名 =&gt; プールのHash構造になっている。プロセスごとに保持している理由はforkへの対応。
-クラスオブジェクト自身ではなくクラス名がkeyになっている理由は、
-development modeでクラス再読み込みするのでクラスオブジェクトをそのまま使用していると参照が消えずリークしてしまうから。</p>
-
-<p>それを踏まえ、Railsを起動直後のConnectionHandlerの構造は以下になる。</p>
-
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>#&lt;ActiveRecord::ConnectionAdapters::ConnectionHandler:0x007f835c5da700
-  @class_to_pool=
-    #&lt;ThreadSafe::Cache:0x007f835c5da5e8
-      @backend=
-        { 71941 =&gt;
-          #&lt;ThreadSafe::Cache:0x007f835c6033a8
-            @backend=
-              { "ActiveRecord::Base" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt; }
-            @default_proc=nil&gt; },
-      @default_proc=#&lt;Proc:...&gt;&gt;,
-  @owner_to_pool=
-    #&lt;ThreadSafe::Cache:0x007f835c5da6b0
-      @backend=
-        { 71941 =&gt;
-          #&lt;ThreadSafe::Cache:0x007f835c4ba0f0
-            @backend=
-              { "ActiveRecord::Base" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt; },
-            @default_proc=nil&gt; },
-      @default_proc=#&lt;Proc:...&gt;&gt;
-</code></pre></div></div>
-
-<p>@class_to_poolに関しては、Modelがコネクションを取得する際に使用するプールを特定するためのキャッシュなのでここでは見ない。</p>
-
-<p>データベースにはこの段階では接続せずコネクションプールを初期するだけで、
-コネクションが必要になった段階で接続するように遅延処理されている。</p>
-
-<h2 id="connection">#connection</h2>
-
-<p>実際にデータベースに接続されるのはconnectionを読んだタイミング。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/connection_handling.rb</span>
-
-<span class="k">def</span> <span class="nf">connection</span>
-  <span class="n">retrieve_connection</span>
-<span class="k">end</span>
-
-<span class="k">def</span> <span class="nf">retrieve_connection</span>
-  <span class="n">connection_handler</span><span class="p">.</span><span class="nf">retrieve_connection</span><span class="p">(</span><span class="nb">self</span><span class="p">)</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># active_record/connection_adapters/abstract/connection_pool.rb</span>
-
-<span class="c1"># ActiveRecord::ConnectionAdapters::ConnectionHandler</span>
-<span class="k">def</span> <span class="nf">retrieve_connection</span><span class="p">(</span><span class="n">klass</span><span class="p">)</span> <span class="c1">#:nodoc:</span>
-  <span class="n">pool</span> <span class="o">=</span> <span class="n">retrieve_connection_pool</span><span class="p">(</span><span class="n">klass</span><span class="p">)</span>
-  <span class="k">raise</span> <span class="no">ConnectionNotEstablished</span><span class="p">,</span> <span class="s2">"No connection pool for </span><span class="si">#{</span><span class="n">klass</span><span class="si">}</span><span class="s2">"</span> <span class="k">unless</span> <span class="n">pool</span>
-  <span class="n">conn</span> <span class="o">=</span> <span class="n">pool</span><span class="p">.</span><span class="nf">connection</span>
-  <span class="k">raise</span> <span class="no">ConnectionNotEstablished</span><span class="p">,</span> <span class="s2">"No connection for </span><span class="si">#{</span><span class="n">klass</span><span class="si">}</span><span class="s2"> in connection pool"</span> <span class="k">unless</span> <span class="n">conn</span>
-  <span class="n">conn</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>それぞれがちょっとした処理になってるので2つに分けて見ていく。</p>
-
-<h4 id="retrieve_connection_poolklass">retrieve_connection_pool(klass)</h4>
-
-<p>klassに対応するpoolを取得する。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">retrieve_connection_pool</span><span class="p">(</span><span class="n">klass</span><span class="p">)</span>
-  <span class="n">class_to_pool</span><span class="p">[</span><span class="n">klass</span><span class="p">.</span><span class="nf">name</span><span class="p">]</span> <span class="o">||=</span> <span class="k">begin</span>
-    <span class="k">until</span> <span class="n">pool</span> <span class="o">=</span> <span class="n">pool_for</span><span class="p">(</span><span class="n">klass</span><span class="p">)</span>
-      <span class="n">klass</span> <span class="o">=</span> <span class="n">klass</span><span class="p">.</span><span class="nf">superclass</span>
-      <span class="k">break</span> <span class="k">unless</span> <span class="n">klass</span> <span class="o">&lt;=</span> <span class="no">Base</span>
-    <span class="k">end</span>
-
-    <span class="n">class_to_pool</span><span class="p">[</span><span class="n">klass</span><span class="p">.</span><span class="nf">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pool</span>
-  <span class="k">end</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>class_to_poolの実装は<code class="language-plaintext highlighter-rouge">@class_to_pool[Process.pid]</code>になっていて、代入の結果以下の構造になる。
-(@class_to_poolは実際にはThreadSafe::Cacheのインスタンスだが、Hashのように振る舞う)</p>
-
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>{ 71941 =&gt; { "ActiveRecord::Base" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt;,
-             "MyModel" =&gt; #&lt;ActiveRecord::ConnectionAdapters::ConnectionPool:...&gt; } }
-</code></pre></div></div>
-
-<p>先ほどのowner_to_poolと似ているが役割が異なっている。
-owner_to_poolはプールを所持している(establish_connectionを実行した)クラスを管理している。
-class_to_poolはクラスが使用するプールを管理している。プールを所持していない場合、
-親クラスが所持するプールを使用するので分けて管理している。</p>
-
-<p>実装は、class_to_pool[klass.name]が存在しない場合にpool_for(klass)でクラスが所持するプールの取得を試みる。
-プールを所持していなければActiveRecord::Baseまで親クラスをたどり続ける。継承関係にあるクラスが明示的にestablish_connectionを呼ばない限り、
-親クラスのコネクションを共有するのはこの処理のおかげである。</p>
-
-<p>ちなみにclass_to_poolはキャッシュなので、新規にestablish_connectionが呼ばれた際にはclearされる。
-establish_connectionが呼ばれた瞬間から、既にキャッシュされているクラスが違うプールを使用する可能性があるから。</p>
-
-<p>pool_forの実装は以下になっている。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">pool_for</span><span class="p">(</span><span class="n">owner</span><span class="p">)</span>
-  <span class="n">owner_to_pool</span><span class="p">.</span><span class="nf">fetch</span><span class="p">(</span><span class="n">owner</span><span class="p">.</span><span class="nf">name</span><span class="p">)</span> <span class="p">{</span>
-    <span class="k">if</span> <span class="n">ancestor_pool</span> <span class="o">=</span> <span class="n">pool_from_any_process_for</span><span class="p">(</span><span class="n">owner</span><span class="p">)</span>
-      <span class="c1"># A connection was established in an ancestor process that must have</span>
-      <span class="c1"># subsequently forked. We can't reuse the connection, but we can copy</span>
-      <span class="c1"># the specification and establish a new connection with it.</span>
-      <span class="n">establish_connection</span> <span class="n">owner</span><span class="p">,</span> <span class="n">ancestor_pool</span><span class="p">.</span><span class="nf">spec</span>
-    <span class="k">else</span>
-      <span class="n">owner_to_pool</span><span class="p">[</span><span class="n">owner</span><span class="p">.</span><span class="nf">name</span><span class="p">]</span> <span class="o">=</span> <span class="kp">nil</span>
-    <span class="k">end</span>
-  <span class="p">}</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>owner_to_poolのkeyが存在するのは下記の2パターン。</p>
-
-<ul>
-  <li>明示的にestablish_connectionを呼ばれた</li>
-  <li>既に一度引数としてownerが渡されている</li>
-</ul>
-
-<p>pool_from_any_process_for(owner)は@owner_to_pool全体からowner.nameに対応するプールを探す。
-プールが存在する場合、別プロセス(親プロセス)でプールを生成していたということになる。
-つまりコメントの通りで、forkされてたら(子プロセスなら)親のプールのspecを元に再接続している。</p>
-
-<p>そして得られたプールを<code class="language-plaintext highlighter-rouge">class_to_pool[klass.name] = pool</code>でキャッシュにセットしている。
-プールがない場合にnilをセットしているのは2回目以降この処理を行わないため。</p>
-
-<h4 id="poolconnection">pool.connection</h4>
-
-<p>@reserved_connections[current_connection_id]に取得済みのコネクションがなければcheckoutしている。
-checkoutはpoolからコネクションを(余っていれば)取得する処理。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">connection</span>
-  <span class="c1"># this is correctly done double-checked locking</span>
-  <span class="c1"># (ThreadSafe::Cache's lookups have volatile semantics)</span>
-  <span class="vi">@reserved_connections</span><span class="p">[</span><span class="n">current_connection_id</span><span class="p">]</span> <span class="o">||</span> <span class="n">synchronize</span> <span class="k">do</span>
-    <span class="vi">@reserved_connections</span><span class="p">[</span><span class="n">current_connection_id</span><span class="p">]</span> <span class="o">||=</span> <span class="n">checkout</span>
-  <span class="k">end</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>@reserved_connectionsもThreadSafe::Cacheのインスタンスだ。チェックアウトされたコネクションはスレッドごとに保持されているため、その他のスレッドからは使用されないという仕組みだ。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">checkout</span>
-  <span class="n">synchronize</span> <span class="k">do</span>
-    <span class="n">conn</span> <span class="o">=</span> <span class="n">acquire_connection</span>
-    <span class="n">conn</span><span class="p">.</span><span class="nf">lease</span>
-    <span class="n">checkout_and_verify</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span>
-  <span class="k">end</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>checkoutの処理は、3段階に別れる。</p>
-
-<ul>
-  <li>acquire_connection</li>
-</ul>
-
-<p>コネクション取得処理。中身の処理の内容は</p>
-
-<ol>
-  <li>利用可能なコネクションのキューからをコネクションを取得</li>
-  <li>(1で取得出来なかった場合) プール上限に達していなければ新規コネクション作成</li>
-  <li>(2でプール上限に達してた場合) timeout付きで再度キューから取得できるのを待つ。だめなら例外</li>
-</ol>
-
-<p>となる。</p>
-
-<ul>
-  <li>conn.lease</li>
-</ul>
-
-<p>自身のスレッドをコネクションのownerにする。
-acquire_connectionの3.でコネクションが足りていない場合、すでに終了しているスレッドが確保しているコネクションを回収する処理があってその時のためにセットされている。</p>
-
-<ul>
-  <li>checkout_and_verify(conn)</li>
-</ul>
-
-<p>コネクションがactiveかどうかを判定し、activeではない場合には再接続を試みる。
-activeかどうかの実装はadapter毎に定義されている(mysql2はpingを投げてる)。
-再接続だめそうならプールからコネクションを削除して例外を投げる。</p>
-
-<p>それぞれの実装詳細は面倒くさいので、ここから先は自分の目で確かめよう！</p>
-
-<p>つまり、あるプロセスが最低限１つ持っているプールをそれぞれのスレッドで取り合っている仕組みになっている。
-そのため、unicorn等のプロセスモデルのサーバーなら余り関係のない話だしpumaのようなスレッドモデルのサーバーならプールの調整が大切なのである。</p>
-
-<p>これらの仕組みを元に、既存のライブラリがどのようにしてShardingを実現しているかはまた次回。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[ActiveRecordのShardingライブラリを設計する際に、対応する必要があるコネクション管理と実際にコネクションがどのように使用されているのかの部分について書き留めておく。 対象のバージョンは4.2.4だけど4系なら大体同じなので問題ないと思う。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry></feed>
+<p>ただ、ブログに対してアプリケーションを動かすこと自体がちょっとめんどくさくなってしまって今はGithub Pages + Jekyllで運用しているんだけど、こうやってちょっと頑張って移行した手前そのうち向こうのブログにも何か書いていきたい。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/posts/2015-11-30-heroku-to-openshift/top.png" /><media:content medium="image" url="https://daichi.dev/assets/images/posts/2015-11-30-heroku-to-openshift/top.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry></feed>
