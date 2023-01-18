@@ -6,15 +6,7 @@ url: https://daichi.dev
 timezone: Asia/Tokyo
 lang: ja_JP
 
-plugins:
-  - jekyll-auto-image
-  - jekyll-feed
-  - jekyll-postcss
-  - jekyll-seo-tag
-  - jekyll-sitemap
-
-postcss:
-  cache: false
+future: true
 
 defaults:
   - scope:
@@ -41,6 +33,17 @@ exclude:
   - postcss.config.js
   - tailwind.config.js
   - yarn.lock
+
+plugins:
+  - jekyll-auto-image
+  - jekyll-feed
+  - jekyll-postcss
+  - jekyll-seo-tag
+  - jekyll-sitemap
+  - jekyll-target-blank
+
+postcss:
+  cache: false
 
 image: /assets/images/og.png
 
