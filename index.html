@@ -2,31 +2,33 @@
 layout: default
 ---
 
-<div class="mx-4 lg:m-auto lg:w-2/3 py-4 prose max-w-none">
-  <p class="text-2xl mb-10">{{ site.description }}</p>
+<div class="mx-4 lg:m-auto lg:w-2/3 py-8 prose max-w-none">
+  <p class="text-2xl">{{ site.description }}</p>
+</div>
 
+<article class="mx-4 py-8 lg:m-auto lg:w-2/3 prose max-w-none content">
+  <h1 class="mb-0">Posts</h1>
+  {% for post in site.posts %}
+  {% assign currentdate = post.date | date: "%Y" %}
+  {% if currentdate != date %}
+  <h2 id="{{currentdate}}" class="mt-8">{{ currentdate }}</h2>
+  {% assign date = currentdate %}
+  {% endif %}
+  <div class="py-2">
+    <time class="block lg:inline-block lg:w-1/6 tracking-tight text-gray-800 font-extrabold" datetime="{{ page.date | date:"%Y-%m-%d" }}">{{ post.date | date: "%Y-%m-%d" }}</time>
+    <a class="text-2xl no-underline" href="{{ post.url }}">{{ post.title }}</a>
+  </div>
+  {% endfor %}
+</article>
+
+<div class="mx-4 lg:m-auto lg:w-2/3 py-8 prose max-w-none">
   <h1>About</h1>
 
   <div class="flex flex-row space-x-4 items-center not-prose mb-8">
     <img class="h-24 w-24 rounded-full p-1 border-2 border-purple-500" src="/assets/images/avatar.png" alt="avatar">
     <div>
       <div class="text-xl font-medium text-black">Daichi Hirata</div>
-      <p class="text-slate-500">Software Engineer</p>
+      <p class="text-slate-500">渋谷近辺で働いているソフトウェアエンジニア。ソーシャルゲームの開発や広告配信、スタートアップ CTO などをやったりしましたが今はコミュニケーションの会社でベッティングのシステムを作ってます。 昔は Ruby を沢山書いていたので心の友は Ruby ですが今は大体 Golang を使って開発しています。ソフトウェアアーキテクチャやシステムパフォーマンス周りに関心が強いです。</p>
     </div>
   </div>
 </div>
-
-<article class="mx-4 lg:m-auto lg:w-2/3 prose max-w-none content">
-  <h1>Posts</h1>
-  {% for post in site.posts %}
-  {% assign currentdate = post.date | date: "%Y" %}
-  {% if currentdate != date %}
-  <h2 id="{{currentdate}}">{{ currentdate }}</h2>
-  {% assign date = currentdate %}
-  {% endif %}
-  <div class="py-2">
-    <time class="block lg:inline-block lg:w-1/6 tracking-tight text-gray-800 font-extrabold" datetime="{{ page.date | date:"%Y-%m-%d" }}">{{ post.date | date: "%Y-%m-%d" }}</time>
-    <a class="text-2xl" href="{{ post.url }}">{{ post.title }}</a>
-  </div>
-  {% endfor %}
-</article>
