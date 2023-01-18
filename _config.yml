@@ -47,3 +47,6 @@ postcss:
 
 image: /assets/images/og.png
 
+twitter:
+  username: daichirata
+  card: summary
