@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title>golang.org/x/time/rate</title>
+    <link rel="shortcut icon" href="/assets/images/favicon.ico">
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<meta name="generator" content="Jekyll v4.3.1" />
+<meta property="og:title" content="golang.org/x/time/rate" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="description" content="golang.org/x には Go プロジェクト配下なんだけどメインツリー外の、いわゆる準標準的なライブラリが管理されています。Go の language server 実装である gopls なんかもこの配下で管理されていて、Go 本体よりゆるい互換性で開発されていると明言されている通り割とアグレッシブで面白い機能を持ったライブラリがあります。ライブラリから機能に対するインスピレーションを得られる事も多々あるので、今回はその中から適当に面白い奴として golang.org/x/time/rate を取り上げます。" />
+<meta property="og:description" content="golang.org/x には Go プロジェクト配下なんだけどメインツリー外の、いわゆる準標準的なライブラリが管理されています。Go の language server 実装である gopls なんかもこの配下で管理されていて、Go 本体よりゆるい互換性で開発されていると明言されている通り割とアグレッシブで面白い機能を持ったライブラリがあります。ライブラリから機能に対するインスピレーションを得られる事も多々あるので、今回はその中から適当に面白い奴として golang.org/x/time/rate を取り上げます。" />
+<link rel="canonical" href="https://daichi.dev/posts/2023-01-19-golang-x-time-rate" />
+<meta property="og:url" content="https://daichi.dev/posts/2023-01-19-golang-x-time-rate" />
+<meta property="og:site_name" content="daichi.dev" />
+<meta property="og:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2023-01-19T00:00:00+09:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="twitter:title" content="golang.org/x/time/rate" />
+<meta name="twitter:site" content="@daichirata" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2023-01-19T00:00:00+09:00","datePublished":"2023-01-19T00:00:00+09:00","description":"golang.org/x には Go プロジェクト配下なんだけどメインツリー外の、いわゆる準標準的なライブラリが管理されています。Go の language server 実装である gopls なんかもこの配下で管理されていて、Go 本体よりゆるい互換性で開発されていると明言されている通り割とアグレッシブで面白い機能を持ったライブラリがあります。ライブラリから機能に対するインスピレーションを得られる事も多々あるので、今回はその中から適当に面白い奴として golang.org/x/time/rate を取り上げます。","headline":"golang.org/x/time/rate","image":"https://daichi.dev/assets/images/og.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://daichi.dev/posts/2023-01-19-golang-x-time-rate"},"url":"https://daichi.dev/posts/2023-01-19-golang-x-time-rate"}</script>
+<!-- End Jekyll SEO tag -->
+
+  </head>
+  <body>
+    <header class="mx-4 lg:m-auto lg:w-2/3 py-6 flex items-center justify-between">
+      <h1><a href="/" class="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500">daichi.dev</a></h1>
+      <nav class="flex item-center">
+        <a class="pr-4" href="https://twitter.com/daichirata" target="_blank" rel="noopener noreferrer" title="Twitter"><svg height="25" width="25" viewbox="0 0 512 512"><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z" fill="#454C51"></path></svg></a>
+        <a href="https://github.com/daichirata" target="_blank" rel="noopener noreferrer" title="GitHub"><svg height="25" width="25" viewbox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" fill="#454C51"></path></svg></a>
+      </nav>
+    </header>
+
+    <article class="mx-4 lg:m-auto lg:w-2/3 prose max-w-none">
+  <header class="py-8">
+    <h1 class="mb-2 text-5xl lg:text-5xl tracking-tight text-black font-extrabold break-words">golang.org/x/time/rate</h1>
+    <time class="tracking-tight text-gray-600 font-semibold" datetime="2023-01-19">2023-01-19</time>
+    <span class="mx-4 px-4 py-2 border-l-2 border-gray-300 text-gray-500 font-normal">
+      <a href="https://twitter.com/daichirata" class="no-underline" target="_blank" rel="noopener noreferrer">@daichirata</a>
+    </span>
+  </header>
+
+  <div class="text-xl subpixel-antialiased leading-relaxed break-words content">
+    <p><a href="https://pkg.go.dev/golang.org/x" target="_blank" rel="noopener noreferrer">golang.org/x</a> には Go プロジェクト配下なんだけどメインツリー外の、いわゆる準標準的なライブラリが管理されています。Go の language server 実装である <a href="https://pkg.go.dev/golang.org/x/tools/gopls" target="_blank" rel="noopener noreferrer">gopls</a> なんかもこの配下で管理されていて、Go 本体よりゆるい互換性で開発されていると明言されている通り割とアグレッシブで面白い機能を持ったライブラリがあります。ライブラリから機能に対するインスピレーションを得られる事も多々あるので、今回はその中から適当に面白い奴として <code class="language-plaintext highlighter-rouge">golang.org/x/time/rate</code> を取り上げます。</p>
+
+<p><a href="https://pkg.go.dev/golang.org/x/time/rate" target="_blank" rel="noopener noreferrer">golang.org/x/time/rate</a></p>
+
+<p>このライブラリには主に <code class="language-plaintext highlighter-rouge">Limiter</code> と <code class="language-plaintext highlighter-rouge">Sometimes</code> の２つの機能があるのでそれぞれについて書きます。</p>
+
+<h2 id="limiter">Limiter</h2>
+
+<p>Limiter は <a href="https://ja.wikipedia.org/wiki/%E3%83%88%E3%83%BC%E3%82%AF%E3%83%B3%E3%83%90%E3%82%B1%E3%83%83%E3%83%88" target="_blank" rel="noopener noreferrer">トークンバケット</a>というアルゴリズムを用いて秒間のイベント(回数|量)を制限する事ができます。これにより、サーバーや特定のリソースに対して過剰な負荷をかけないようにすることが出来ます。例えばトークンを貯めるバケットの上限が 10 で秒間 5 ずつトークンが貯まる設定の場合、常にイベントが発生している場合は最大 5 rps のペースでイベントを実行(トークンを消費)する事ができ、2 秒以上イベントの発生が無い場合は 10 までトークンを貯めることが出来ます。なのでその瞬間に限って言うとイベントの処理時間を無視すれば貯蓄していた 10 トークン分のイベント + 秒間に補填される 5 トークンで 15 rps までバーストすることが出来るといったような感じです。</p>
+
+<p>使用方法としてまず初めに <code class="language-plaintext highlighter-rouge">NewLimiter</code> 関数を使用して制限するための Limiter を作成します。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// func NewLimiter(r Limit , b int) *Limiter</span>
+<span class="n">limiter</span> <span class="o">:=</span> <span class="n">rate</span><span class="o">.</span><span class="n">NewLimiter</span><span class="p">(</span><span class="m">5</span><span class="p">,</span> <span class="m">1</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>第一引数がトークンが秒間に溜まる速度、第二引数がトークンバケットのサイズです。この例でいうと秒間 5 トークン補充されるので最大 5 rps までイベントを実行することが出来ますが、トークンバケットのサイズは 1 なのでトークンを 1 つしかストック出来ないのでバーストすることは出来ません。</p>
+
+<p><code class="language-plaintext highlighter-rouge">Every</code> 関数で interval の間隔でトークンが 1 つ補充されるという指定をすることも出来ます。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// func Every(interval time.Duration) Limit</span>
+<span class="n">limiter</span> <span class="o">:=</span> <span class="n">rate</span><span class="o">.</span><span class="n">NewLimiter</span><span class="p">(</span><span class="n">rate</span><span class="o">.</span><span class="n">Every</span><span class="p">(</span><span class="m">300</span><span class="o">*</span><span class="n">time</span><span class="o">.</span><span class="n">Millisecond</span><span class="p">),</span> <span class="m">1</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>この例の場合は 300 ms 毎にトークンが 1 つ補填されるようになり、約 3.3 rps のペースでイベントを実行する事が出来ます。</p>
+
+<p>その後に <code class="language-plaintext highlighter-rouge">Wait</code> 関数を使用してイベントの実行が許可されるまでブロックします。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">package</span> <span class="n">main</span>
+
+<span class="k">import</span> <span class="p">(</span>
+	<span class="s">"context"</span>
+	<span class="s">"fmt"</span>
+	<span class="s">"sync"</span>
+	<span class="s">"time"</span>
+
+	<span class="s">"golang.org/x/time/rate"</span>
+<span class="p">)</span>
+
+<span class="k">func</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
+	<span class="n">ctx</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">Background</span><span class="p">()</span>
+	<span class="k">var</span> <span class="n">wg</span> <span class="n">sync</span><span class="o">.</span><span class="n">WaitGroup</span>
+
+	<span class="n">limiter</span> <span class="o">:=</span> <span class="n">rate</span><span class="o">.</span><span class="n">NewLimiter</span><span class="p">(</span><span class="m">5</span><span class="p">,</span> <span class="m">1</span><span class="p">)</span>
+
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="m">30</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="n">wg</span><span class="o">.</span><span class="n">Add</span><span class="p">(</span><span class="m">1</span><span class="p">)</span>
+		<span class="n">i</span> <span class="o">:=</span> <span class="n">i</span>
+		<span class="k">go</span> <span class="k">func</span><span class="p">()</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">limiter</span><span class="o">.</span><span class="n">Wait</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="nb">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+			<span class="p">}</span>
+			<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s">"%s: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">(),</span> <span class="n">i</span><span class="p">)</span>
+			<span class="n">wg</span><span class="o">.</span><span class="n">Done</span><span class="p">()</span>
+		<span class="p">}()</span>
+	<span class="p">}</span>
+	<span class="n">wg</span><span class="o">.</span><span class="n">Wait</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>このコードの <a href="https://go.dev/play/p/wyq7rAhZSUN" target="_blank" rel="noopener noreferrer">Playground がこちら</a> で、以下のような実行結果になります。</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2009-11-10 23:00:00 +0000 UTC <span class="nv">m</span><span class="o">=</span>+0.000000001: 19
+2009-11-10 23:00:00.2 +0000 UTC <span class="nv">m</span><span class="o">=</span>+0.200000001: 14
+2009-11-10 23:00:00.4 +0000 UTC <span class="nv">m</span><span class="o">=</span>+0.400000001: 11
+2009-11-10 23:00:00.6 +0000 UTC <span class="nv">m</span><span class="o">=</span>+0.600000001: 9
+2009-11-10 23:00:00.8 +0000 UTC <span class="nv">m</span><span class="o">=</span>+0.800000001: 10
+2009-11-10 23:00:01 +0000 UTC <span class="nv">m</span><span class="o">=</span>+1.000000001: 13
+2009-11-10 23:00:01.2 +0000 UTC <span class="nv">m</span><span class="o">=</span>+1.200000001: 4
+2009-11-10 23:00:01.4 +0000 UTC <span class="nv">m</span><span class="o">=</span>+1.400000001: 0
+2009-11-10 23:00:01.6 +0000 UTC <span class="nv">m</span><span class="o">=</span>+1.600000001: 1
+2009-11-10 23:00:01.8 +0000 UTC <span class="nv">m</span><span class="o">=</span>+1.800000001: 2
+2009-11-10 23:00:02 +0000 UTC <span class="nv">m</span><span class="o">=</span>+2.000000001: 3
+2009-11-10 23:00:02.2 +0000 UTC <span class="nv">m</span><span class="o">=</span>+2.200000001: 16
+2009-11-10 23:00:02.4 +0000 UTC <span class="nv">m</span><span class="o">=</span>+2.400000001: 15
+2009-11-10 23:00:02.6 +0000 UTC <span class="nv">m</span><span class="o">=</span>+2.600000001: 6
+2009-11-10 23:00:02.8 +0000 UTC <span class="nv">m</span><span class="o">=</span>+2.800000001: 5
+2009-11-10 23:00:03 +0000 UTC <span class="nv">m</span><span class="o">=</span>+3.000000001: 17
+2009-11-10 23:00:03.2 +0000 UTC <span class="nv">m</span><span class="o">=</span>+3.200000001: 18
+2009-11-10 23:00:03.4 +0000 UTC <span class="nv">m</span><span class="o">=</span>+3.400000001: 7
+2009-11-10 23:00:03.6 +0000 UTC <span class="nv">m</span><span class="o">=</span>+3.600000001: 8
+2009-11-10 23:00:03.8 +0000 UTC <span class="nv">m</span><span class="o">=</span>+3.800000001: 12
+
+Program exited.
+</code></pre></div></div>
+
+<p>ちゃんと想定通り秒間 5 rps でイベントを実行出来ていると思います。</p>
+
+<p>ただ、ここまでの内容であればこのライブラリを使用しなくても例えば <code class="language-plaintext highlighter-rouge">time.Ticker</code> を使用して 200 ms 間隔で処理をするだけでよかったりで <code class="language-plaintext highlighter-rouge">Limiter</code> を使うメリットをそこまで感じないかなと思いますが、このライブラリの面白い所は <code class="language-plaintext highlighter-rouge">Wait</code> で消費するトークンの量を指定することが出来る点にあります。トークンの量を指定する事で可能な面白い事の一つとして、トークンを byte に置き換えることでディスクやネットワークへの書き込みや読み込みの制限を簡単に実装することが出来ます。実現するには <code class="language-plaintext highlighter-rouge">WaitN</code> 関数を使います。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// 複数のトークンを一度に消費するので、トークンバケットの上限を 1 以上に設定します</span>
+<span class="n">limiter</span> <span class="o">:=</span> <span class="n">rate</span><span class="o">.</span><span class="n">NewLimiter</span><span class="p">(</span><span class="m">2</span><span class="p">,</span> <span class="m">8</span><span class="p">)</span>
+
+<span class="c">// limiter を生成した瞬間はトークンが最大まで溜まっている状態なので</span>
+<span class="c">// 動作確認のために一旦トークンを全て消費</span>
+<span class="n">limiter</span><span class="o">.</span><span class="n">WaitN</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="m">8</span><span class="p">)</span>
+
+<span class="c">// 4 トークン消費可能になるまでブロックする</span>
+<span class="n">limiter</span><span class="o">.</span><span class="n">WaitN</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="m">4</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>この指定の場合、<code class="language-plaintext highlighter-rouge">WaitN</code> で 4 トークンを要求しているのでトークンバケットが空の場合トークンが補填されまで 2 秒感の間 <code class="language-plaintext highlighter-rouge">WaitN</code> で処理がブロックされます。余談ですが <code class="language-plaintext highlighter-rouge">Wait</code> 関数は内部で 1 トークンを要求する <code class="language-plaintext highlighter-rouge">WantN</code> 関数の呼び出しとして実装されています。</p>
+
+<p>これを <code class="language-plaintext highlighter-rouge">io.Writer</code> の interface に合わせる事で以下のような物が実装可能になります。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">package</span> <span class="n">main</span>
+
+<span class="k">import</span> <span class="p">(</span>
+	<span class="s">"bytes"</span>
+	<span class="s">"context"</span>
+	<span class="s">"fmt"</span>
+	<span class="s">"io"</span>
+	<span class="s">"math/rand"</span>
+	<span class="s">"time"</span>
+
+	<span class="s">"golang.org/x/time/rate"</span>
+<span class="p">)</span>
+
+<span class="k">func</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
+	<span class="c">// 500 KB</span>
+	<span class="n">data</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">([]</span><span class="kt">byte</span><span class="p">,</span> <span class="m">500</span><span class="o">*</span><span class="m">1024</span><span class="p">)</span>
+	<span class="n">rand</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+	<span class="n">reader</span> <span class="o">:=</span> <span class="n">bytes</span><span class="o">.</span><span class="n">NewReader</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+	<span class="n">writer</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">bytes</span><span class="o">.</span><span class="n">Buffer</span><span class="p">{}</span>
+	<span class="c">// 100 KB ずつトークンが補填され、秒間最大で 100 KBまで読み書きが行われる</span>
+	<span class="n">limiter</span> <span class="o">:=</span> <span class="n">rate</span><span class="o">.</span><span class="n">NewLimiter</span><span class="p">(</span><span class="m">100</span><span class="o">*</span><span class="m">1024</span><span class="p">,</span> <span class="m">100</span><span class="o">*</span><span class="m">1024</span><span class="p">)</span>
+	<span class="n">limiter</span><span class="o">.</span><span class="n">WaitN</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">TODO</span><span class="p">(),</span> <span class="m">100</span><span class="o">*</span><span class="m">1024</span><span class="p">)</span> <span class="c">// 最初に溜まっている全てのトークンを消費</span>
+
+	<span class="n">rw</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">ReadWriter</span><span class="p">{</span><span class="n">w</span><span class="o">:</span> <span class="n">writer</span><span class="p">,</span> <span class="n">r</span><span class="o">:</span> <span class="n">reader</span><span class="p">,</span> <span class="n">limiter</span><span class="o">:</span> <span class="n">limiter</span><span class="p">}</span>
+
+	<span class="n">readStart</span> <span class="o">:=</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">()</span>
+
+	<span class="c">// 500 KB のデータを一括で読み込む</span>
+	<span class="n">buf</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">([]</span><span class="kt">byte</span><span class="p">,</span> <span class="m">500</span><span class="o">*</span><span class="m">1024</span><span class="p">)</span>
+	<span class="n">n</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">rw</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
+	<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+		<span class="nb">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">buf</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">!=</span> <span class="n">buf</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="p">{</span>
+			<span class="nb">panic</span><span class="p">(</span><span class="s">"OMG!"</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="c">// 5 秒でデータを読み切る</span>
+	<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s">"readed %d bytes in %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">Since</span><span class="p">(</span><span class="n">readStart</span><span class="p">))</span>
+
+	<span class="n">writeStart</span> <span class="o">:=</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">()</span>
+
+	<span class="c">// 500 KB のデータを一括で書き込む</span>
+	<span class="n">n</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">rw</span><span class="o">.</span><span class="n">Write</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+	<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+		<span class="nb">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="n">buf</span> <span class="o">=</span> <span class="n">writer</span><span class="o">.</span><span class="n">Bytes</span><span class="p">()</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">buf</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">!=</span> <span class="n">buf</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="p">{</span>
+			<span class="nb">panic</span><span class="p">(</span><span class="s">"OMG!"</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="c">// 5 秒でデータを読み切る</span>
+	<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s">"wrote %d bytes in %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">Since</span><span class="p">(</span><span class="n">writeStart</span><span class="p">))</span>
+<span class="p">}</span>
+
+<span class="k">type</span> <span class="n">ReadWriter</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">w</span>       <span class="n">io</span><span class="o">.</span><span class="n">Writer</span>
+	<span class="n">r</span>       <span class="n">io</span><span class="o">.</span><span class="n">Reader</span>
+	<span class="n">limiter</span> <span class="o">*</span><span class="n">rate</span><span class="o">.</span><span class="n">Limiter</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">rw</span> <span class="o">*</span><span class="n">ReadWriter</span><span class="p">)</span> <span class="n">Read</span><span class="p">(</span><span class="n">p</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">)</span> <span class="p">(</span><span class="kt">int</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">var</span> <span class="n">n</span> <span class="kt">int</span>
+
+	<span class="k">for</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+		<span class="c">// 一度に消費できるトークンの最大値に合わせて一度に読み込む量を調整する</span>
+		<span class="n">size</span> <span class="o">:=</span> <span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="n">n</span><span class="o">:</span><span class="p">])</span>
+		<span class="k">if</span> <span class="n">size</span> <span class="o">&gt;</span> <span class="n">rw</span><span class="o">.</span><span class="n">limiter</span><span class="o">.</span><span class="n">Burst</span><span class="p">()</span> <span class="p">{</span>
+			<span class="n">size</span> <span class="o">=</span> <span class="n">rw</span><span class="o">.</span><span class="n">limiter</span><span class="o">.</span><span class="n">Burst</span><span class="p">()</span>
+		<span class="p">}</span>
+
+		<span class="n">rn</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">rw</span><span class="o">.</span><span class="n">r</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="n">n</span> <span class="o">:</span> <span class="n">n</span><span class="o">+</span><span class="n">size</span><span class="p">])</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="n">err</span>
+		<span class="p">}</span>
+		<span class="n">n</span> <span class="o">+=</span> <span class="n">rn</span>
+
+		<span class="c">// 読み込んだバイト数をトークンに見立てて消費させる事で秒間の読込レートを制御する</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">rw</span><span class="o">.</span><span class="n">limiter</span><span class="o">.</span><span class="n">WaitN</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">TODO</span><span class="p">(),</span> <span class="n">rn</span><span class="p">);</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="n">err</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="no">nil</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">rw</span> <span class="o">*</span><span class="n">ReadWriter</span><span class="p">)</span> <span class="n">Write</span><span class="p">(</span><span class="n">b</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">)</span> <span class="p">(</span><span class="kt">int</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">var</span> <span class="n">n</span> <span class="kt">int</span>
+
+	<span class="k">for</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+		<span class="c">// 一度に消費できるトークンの最大値に合わせて一度に書き込む量を調整する</span>
+		<span class="n">size</span> <span class="o">:=</span> <span class="nb">len</span><span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="n">n</span><span class="o">:</span><span class="p">])</span>
+		<span class="k">if</span> <span class="n">size</span> <span class="o">&gt;</span> <span class="n">rw</span><span class="o">.</span><span class="n">limiter</span><span class="o">.</span><span class="n">Burst</span><span class="p">()</span> <span class="p">{</span>
+			<span class="n">size</span> <span class="o">=</span> <span class="n">rw</span><span class="o">.</span><span class="n">limiter</span><span class="o">.</span><span class="n">Burst</span><span class="p">()</span>
+		<span class="p">}</span>
+
+		<span class="n">wn</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">rw</span><span class="o">.</span><span class="n">w</span><span class="o">.</span><span class="n">Write</span><span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="n">n</span> <span class="o">:</span> <span class="n">n</span><span class="o">+</span><span class="n">size</span><span class="p">])</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="n">err</span>
+		<span class="p">}</span>
+		<span class="n">n</span> <span class="o">+=</span> <span class="n">wn</span>
+
+		<span class="c">// 書き込んだバイト数をトークンに見立てて消費させる事で秒間の書込レートを制御する</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">rw</span><span class="o">.</span><span class="n">limiter</span><span class="o">.</span><span class="n">WaitN</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">TODO</span><span class="p">(),</span> <span class="n">wn</span><span class="p">);</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="n">err</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="no">nil</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>このコードの <a href="https://go.dev/play/p/NyyYhBiBP1E" target="_blank" rel="noopener noreferrer">Playground がこちら</a> で、以下のような実行結果になります。</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>readed 512000 bytes <span class="k">in </span>5s
+wrote 512000 bytes <span class="k">in </span>5s
+
+Program exited.
+</code></pre></div></div>
+
+<p>特にこの例では Go の <code class="language-plaintext highlighter-rouge">io.Writer</code> と <code class="language-plaintext highlighter-rouge">io.Reader</code> の汎用性の高さや強力さも相まって簡単な実装だけであらゆる書込と読込の速度を制御する事が出来る <code class="language-plaintext highlighter-rouge">ReadWriter</code> をここまで簡単に実装する事が出来ています。ほかにもトークンの予約を行うための <code class="language-plaintext highlighter-rouge">Reserve</code> 関数や動的に Limit を変更するための <code class="language-plaintext highlighter-rouge">SetLimit</code> 関数などがあるのでプログラマブルに挙動を変える事も可能です。トークンを何に見立てるかのアイディア次第ではもっと面白い使い方もある事でしょう。</p>
+
+<h2 id="sometimes">Sometimes</h2>
+
+<p><code class="language-plaintext highlighter-rouge">Sometimes</code> はとても小さなライブラリで時間と回数に応じたイベントの実行タイミングを制限することが出来ます。具体的には</p>
+
+<ul>
+  <li>最初の n 回だけ実行する</li>
+  <li>n 回毎に実行する</li>
+  <li>n 秒毎に実行する</li>
+</ul>
+
+<p>を or の組み合わせで制御することが出来ます。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span> <span class="n">Sometimes</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">First</span>    <span class="kt">int</span>           <span class="c">// 指定した数を N とした場合、最初の N 回分だけ実行する</span>
+	<span class="n">Every</span>    <span class="kt">int</span>           <span class="c">// 指定した数を N とした場合、N 回毎に実行する</span>
+	<span class="n">Interval</span> <span class="n">time</span><span class="o">.</span><span class="n">Duration</span> <span class="c">// 最後に実行した時間から Interval 分時間が経過していればもう一度実行する</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>なので例えば</p>
+
+<ul>
+  <li>最初の 10 回はログを出力したい</li>
+  <li>10 回を超えた後は 1 秒に 1 回だけログを出力してくれれば良い</li>
+</ul>
+
+<p>という指定を行いたい場合は</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">var</span> <span class="n">sometimes</span> <span class="o">=</span> <span class="n">rate</span><span class="o">.</span><span class="n">Sometimes</span><span class="p">{</span><span class="n">First</span><span class="o">:</span> <span class="m">10</span><span class="p">,</span> <span class="n">Interval</span><span class="o">:</span> <span class="m">1</span><span class="o">*</span><span class="n">time</span><span class="o">.</span><span class="n">Second</span><span class="p">}</span>
+
+<span class="k">func</span> <span class="n">Spammy</span><span class="p">()</span> <span class="p">{</span>
+        <span class="n">sometimes</span><span class="o">.</span><span class="n">Do</span><span class="p">(</span><span class="k">func</span><span class="p">()</span> <span class="p">{</span> <span class="n">log</span><span class="o">.</span><span class="n">Info</span><span class="p">(</span><span class="s">"here I am!"</span><span class="p">)</span> <span class="p">})</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>といった感じで指定する事が可能です。ただ <code class="language-plaintext highlighter-rouge">Sometimes</code> に関しては機能が少なく、実際に使用する場合には n 秒毎に x 回 (例えば 10 秒ごとに 50 件だけログを出力) といった形で x 秒毎に First をリセットしたいとか、もう少し細かい制御を行いたいケースも多いので <code class="language-plaintext highlighter-rouge">Sometimes</code> を直接使える機会はそこまで多くないかもしれません。</p>
+
+  </div>
+</article>
+
+
+    <footer class="mx-4 py-8 lg:m-auto lg:w-2/3 prose max-w-none">
+      <p class="text-center text-gray-500">© 2023 Daichi Hirata</p>
+    </footer>
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-W9BS0Z0NPD"></script>
+<script>
+ window.dataLayer = window.dataLayer || [];
+ function gtag(){dataLayer.push(arguments);}
+ gtag('js', new Date());
+ gtag('config', 'G-W9BS0Z0NPD');
+</script>
+
+  </body>
+</html>

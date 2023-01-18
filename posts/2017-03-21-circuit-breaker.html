@@ -18,9 +18,10 @@
 <meta property="og:image" content="https://daichi.dev/assets/images/posts/2017-03-21-circuit-breaker/image1.png" />
 <meta property="og:type" content="article" />
 <meta property="article:published_time" content="2017-03-21T00:00:00+09:00" />
-<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:card" content="summary" />
 <meta property="twitter:image" content="https://daichi.dev/assets/images/posts/2017-03-21-circuit-breaker/image1.png" />
 <meta property="twitter:title" content="Circuit Breaker" />
+<meta name="twitter:site" content="@daichirata" />
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2017-03-21T00:00:00+09:00","datePublished":"2017-03-21T00:00:00+09:00","description":"データ送信処理が失敗した場合に、リトライの間隔を指数関数的に伸ばしていくことで最終的に処理を完結させるためのアルゴリズムとしてExponential Backoffというものがある。AWSのSDKなどで実際に触ったことがある人も多いと思うけど、実装が単純でそれなりに大規模な環境でも効果的に動く。ジッターなどは抜きに簡易化して書くと次の様な感じでしょうか。","headline":"Circuit Breaker","image":"https://daichi.dev/assets/images/posts/2017-03-21-circuit-breaker/image1.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://daichi.dev/posts/2017-03-21-circuit-breaker"},"url":"https://daichi.dev/posts/2017-03-21-circuit-breaker"}</script>
 <!-- End Jekyll SEO tag -->
@@ -28,19 +29,19 @@
   </head>
   <body>
     <header class="mx-4 lg:m-auto lg:w-2/3 py-6 flex items-center justify-between">
-      <h1><a href="/" class="text-2xl font-extrabold gradation-text">daichi.dev</a></h1>
+      <h1><a href="/" class="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500">daichi.dev</a></h1>
       <nav class="flex item-center">
-        <a class="pr-4" href="https://twitter.com/daichirata" target="_blank" rel="noopener noreferrer" title="Twitter"><svg height="25" width="25" viewBox="0 0 512 512"><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z" fill="#454C51"></path></svg></a>
-        <a href="https://github.com/daichirata" target="_blank" rel="noopener noreferrer" title="GitHub"><svg height="25" width="25" viewBox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" fill="#454C51"></path></svg></a>
+        <a class="pr-4" href="https://twitter.com/daichirata" target="_blank" rel="noopener noreferrer" title="Twitter"><svg height="25" width="25" viewbox="0 0 512 512"><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z" fill="#454C51"></path></svg></a>
+        <a href="https://github.com/daichirata" target="_blank" rel="noopener noreferrer" title="GitHub"><svg height="25" width="25" viewbox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" fill="#454C51"></path></svg></a>
       </nav>
     </header>
 
     <article class="mx-4 lg:m-auto lg:w-2/3 prose max-w-none">
   <header class="py-8">
-    <h1 class="mb-2 text-5xl lg:text-5xl tracking-tight text-black font-extrabold">Circuit Breaker</h1>
+    <h1 class="mb-2 text-5xl lg:text-5xl tracking-tight text-black font-extrabold break-words">Circuit Breaker</h1>
     <time class="tracking-tight text-gray-600 font-semibold" datetime="2017-03-21">2017-03-21</time>
     <span class="mx-4 px-4 py-2 border-l-2 border-gray-300 text-gray-500 font-normal">
-      <a href="https://twitter.com/daichirata" class="no-underline">@daichirata</a>
+      <a href="https://twitter.com/daichirata" class="no-underline" target="_blank" rel="noopener noreferrer">@daichirata</a>
     </span>
   </header>
 
@@ -71,23 +72,23 @@
 
 <p>私がCircuit Breakerを初めて見かけたのはNetfrixのHystrixというライブラリについて調べていた時だったと思う。</p>
 
-<p><a href="https://github.com/Netflix/Hystrix">Netflix/Hystrix</a></p>
+<p><a href="https://github.com/Netflix/Hystrix" target="_blank" rel="noopener noreferrer">Netflix/Hystrix</a></p>
 
 <p>その後、Martin Fowler先生の記事と、そこで紹介されてたRelease It!という本で詳細を知ったんだけど、初出がどこかはちょっとわからない。</p>
 
-<p><a href="https://martinfowler.com/bliki/CircuitBreaker.html">https://martinfowler.com/bliki/CircuitBreaker.html</a></p>
+<p><a href="https://martinfowler.com/bliki/CircuitBreaker.html" target="_blank" rel="noopener noreferrer">https://martinfowler.com/bliki/CircuitBreaker.html</a></p>
 
-<p><a href="https://www.amazon.co.jp/Release-本番用ソフトウェア製品の設計とデプロイのために-Michael-T-Nygard/dp/4274067491">Release-本番用ソフトウェア製品の設計とデプロイのために-Michael-T-Nygard</a></p>
+<p><a href="https://www.amazon.co.jp/Release-%E6%9C%AC%E7%95%AA%E7%94%A8%E3%82%BD%E3%83%95%E3%83%88%E3%82%A6%E3%82%A7%E3%82%A2%E8%A3%BD%E5%93%81%E3%81%AE%E8%A8%AD%E8%A8%88%E3%81%A8%E3%83%87%E3%83%97%E3%83%AD%E3%82%A4%E3%81%AE%E3%81%9F%E3%82%81%E3%81%AB-Michael-T-Nygard/dp/4274067491" target="_blank" rel="noopener noreferrer">Release-本番用ソフトウェア製品の設計とデプロイのために-Michael-T-Nygard</a></p>
 
 <p>どちらかと言うとマイクロサービスのコンテキストで語られることが多くて、複数サービス間で構築されたシステムにおいて、あるシステムに障害が発生した場合に名前の通りそのシステムを遮断して全体影響を抑える様な役割と、実行結果の成功や失敗のイベントを一箇所で管理して検知しやすくするための役割がある。Exponential Backoff などのように処理を再試行するための物ではなく、処理を実行させないようにするところに大きな違いがある。</p>
 
 <p>例えば、Webリクエストの処理内で外部の依存しているAPIをネットワーク経由で呼び出す場合に、ある１つの依存先サービスが疎通不能になった場合にリトライやタイムアウトするまで処理が遅延してしまい、連鎖的にシステム全体がダウンしてしまう事は極力避けたい。</p>
 
-<p><img src="/assets/images/posts/2017-03-21-circuit-breaker/image1.png" alt="" /></p>
+<p><img src="/assets/images/posts/2017-03-21-circuit-breaker/image1.png" alt=""></p>
 
 <p>そこで、各サービスへの通信クライアントの処理をCircuit Breakerを経由するようにして、閾値以上失敗が続いた場合には処理を実行せず、直ぐにエラーを返してサービスを一定期間遮断する。</p>
 
-<p><img src="/assets/images/posts/2017-03-21-circuit-breaker/image2.png" alt="" /></p>
+<p><img src="/assets/images/posts/2017-03-21-circuit-breaker/image2.png" alt=""></p>
 
 <p>遮断に関しては、例えば表示が少しおかしくなるのを許容するとかであれば、依存先のサービス失敗時の初期値やFallback方法を決めるなりすればいい。遮断すると維持出来ないサービスでも、Circuit Breakerには最初の図のように、システム全体がブロックすることによる過負荷を避ける目的もあるので、それなりにどういったシステムでも効果は出るように思う。</p>
 
@@ -119,13 +120,13 @@
   </li>
 </ul>
 
-<p><img src="/assets/images/posts/2017-03-21-circuit-breaker/image3.png" alt="" /></p>
+<p><img src="/assets/images/posts/2017-03-21-circuit-breaker/image3.png" alt=""></p>
 
 <p>マイクロサービスの例で言うと、設定閾値以上のエラーレスポンスを受け取る或いはタイムアウトになるとOpen状態に遷移する。閾値はクライアント実装と設定次第で連続エラー数だったり直近の割合だったりする。</p>
 
 <p>Open状態で実行された処理は全て実行されずにエラーが返る。OpenからHalf Openには一定時間後に移行するが、Half Open状態での処理に失敗すると再度Open状態に移行する。その際に指数関数的に待機間隔が増えていく実装が多い。Half Open自体は使う側が意識することは殆どなく、どちらかというと待機時間の制御の為のステータスと言える。</p>
 
-<p>処理結果に合わせて内部でこれらの状態に遷移しており、状態が変わったときに外部に通知する手段を持つ。どういうインターフェースで通知を受け取れるかは実装次第だが、例えばGoの実装である <a href="https://github.com/rubyist/circuitbreaker">rubyist/circuitbreaker</a> では、Goらしくchannelでイベントを受け取れるようになっている。</p>
+<p>処理結果に合わせて内部でこれらの状態に遷移しており、状態が変わったときに外部に通知する手段を持つ。どういうインターフェースで通知を受け取れるかは実装次第だが、例えばGoの実装である <a href="https://github.com/rubyist/circuitbreaker" target="_blank" rel="noopener noreferrer">rubyist/circuitbreaker</a> では、Goらしくchannelでイベントを受け取れるようになっている。</p>
 
 <div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// Creates a circuit breaker that will trip if the function fails 10 times</span>
 <span class="n">cb</span> <span class="o">:=</span> <span class="n">circuit</span><span class="o">.</span><span class="n">NewThresholdBreaker</span><span class="p">(</span><span class="m">10</span><span class="p">)</span>
@@ -150,13 +151,17 @@
 
 <p>マイクロサービスの例で色々と紹介してきたが、基本的には通信を伴う処理全般で使用することが出来る。今書いているライブラリはGoのgo routineベースのfluent-loggerで、fluentdへのコネクションにwriteする部分で使っている。</p>
 
-<p><a href="https://github.com/daichirata/fluent-logger-go/blob/master/logger.go#L148">https://github.com/daichirata/fluent-logger-go/blob/master/logger.go#L148</a></p>
+<p><a href="https://github.com/daichirata/fluent-logger-go/blob/master/logger.go#L148" target="_blank" rel="noopener noreferrer">https://github.com/daichirata/fluent-logger-go/blob/master/logger.go#L148</a></p>
 
 <p>待機期間が存在するため応答性とのトレードオフが多少あるけど、Circuit Breakerが起動するのはそもそも障害なりで接続が出来なくなっている状態なので問題ないケースも多いかなと思う。</p>
 
   </div>
 </article>
 
+
+    <footer class="mx-4 py-8 lg:m-auto lg:w-2/3 prose max-w-none">
+      <p class="text-center text-gray-500">© 2023 Daichi Hirata</p>
+    </footer>
 
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-W9BS0Z0NPD"></script>
 <script>

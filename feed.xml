@@ -1,12 +1,276 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="ja_JP"><generator uri="https://jekyllrb.com/" version="4.3.1">Jekyll</generator><link href="https://daichi.dev/feed.xml" rel="self" type="application/atom+xml" /><link href="https://daichi.dev/" rel="alternate" type="text/html" hreflang="ja_JP" /><updated>2022-12-28T13:43:34+09:00</updated><id>https://daichi.dev/feed.xml</id><title type="html">daichi.dev</title><subtitle>プログラミングや日々開発してる上で感じた事、日常について書いています。</subtitle><entry><title type="html">なぜ今またブログを書き始めるのか</title><link href="https://daichi.dev/posts/2022-12-27-blog-is-back" rel="alternate" type="text/html" title="なぜ今またブログを書き始めるのか" /><published>2022-12-27T00:00:00+09:00</published><updated>2022-12-27T00:00:00+09:00</updated><id>https://daichi.dev/posts/blog-is-back</id><content type="html" xml:base="https://daichi.dev/posts/2022-12-27-blog-is-back"><![CDATA[<p>ブログのような物を書かなくなってもう随分になる。人は仕事や現状に満足するとどんどんブログを書かなくなってしまうと昔誰かが言っていたけどその通りで、自分の場合は子供が生まれた事で子育てに追われる充実感や仕事上の役職やお賃金が上がりプログラマとしてのプレゼンスの向上に執着しなくなっていったというような実感がある。</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="ja_JP"><generator uri="https://jekyllrb.com/" version="4.3.1">Jekyll</generator><link href="https://daichi.dev/feed.xml" rel="self" type="application/atom+xml" /><link href="https://daichi.dev/" rel="alternate" type="text/html" hreflang="ja_JP" /><updated>2023-01-19T06:11:44+09:00</updated><id>https://daichi.dev/feed.xml</id><title type="html">daichi.dev</title><subtitle>プログラミングや日々開発してる上で感じた事、日常について書いています。</subtitle><entry><title type="html">golang.org/x/time/rate</title><link href="https://daichi.dev/posts/2023-01-19-golang-x-time-rate" rel="alternate" type="text/html" title="golang.org/x/time/rate" /><published>2023-01-19T00:00:00+09:00</published><updated>2023-01-19T00:00:00+09:00</updated><id>https://daichi.dev/posts/golang-x-time-rate</id><content type="html" xml:base="https://daichi.dev/posts/2023-01-19-golang-x-time-rate"><![CDATA[<p><a href="https://pkg.go.dev/golang.org/x">golang.org/x</a> には Go プロジェクト配下なんだけどメインツリー外の、いわゆる準標準的なライブラリが管理されています。Go の language server 実装である <a href="https://pkg.go.dev/golang.org/x/tools/gopls">gopls</a> なんかもこの配下で管理されていて、Go 本体よりゆるい互換性で開発されていると明言されている通り割とアグレッシブで面白い機能を持ったライブラリがあります。ライブラリから機能に対するインスピレーションを得られる事も多々あるので、今回はその中から適当に面白い奴として <code class="language-plaintext highlighter-rouge">golang.org/x/time/rate</code> を取り上げます。</p>
 
-<p>昔は別にブログという形でアウトプットがなくても仕事で使う場面は多く、例えばファイルシステムやプロセスやネットワーク周りの知識とかカーネルチューニングの方法などは覚えてすぐに活用する機会が沢山あった。今ではコンテナ化してしまって直接触ることが随分と減ってしまったような部分の知識は思ってる以上に容赦なく大量に失われていっている実感がある。今使っていなくて失われていっているのは淘汰されて消えていく運命にある知識も沢山あるのでまあ良いのだけど、基礎となる知識は知っているか知らないかで大きく差が出る瞬間が絶対にある知識なので、今使わないから忘れちゃってヨシ！とはならないよなぁというぼんやりとした不安を最近はずっと抱えていた。</p>
+<p><a href="https://pkg.go.dev/golang.org/x/time/rate">golang.org/x/time/rate</a></p>
+
+<p>このライブラリには主に <code class="language-plaintext highlighter-rouge">Limiter</code> と <code class="language-plaintext highlighter-rouge">Sometimes</code> の２つの機能があるのでそれぞれについて書きます。</p>
+
+<h2 id="limiter">Limiter</h2>
+
+<p>Limiter は <a href="https://ja.wikipedia.org/wiki/%E3%83%88%E3%83%BC%E3%82%AF%E3%83%B3%E3%83%90%E3%82%B1%E3%83%83%E3%83%88">トークンバケット</a>というアルゴリズムを用いて秒間のイベント(回数|量)を制限する事ができます。これにより、サーバーや特定のリソースに対して過剰な負荷をかけないようにすることが出来ます。例えばトークンを貯めるバケットの上限が 10 で秒間 5 ずつトークンが貯まる設定の場合、常にイベントが発生している場合は最大 5 rps のペースでイベントを実行(トークンを消費)する事ができ、2 秒以上イベントの発生が無い場合は 10 までトークンを貯めることが出来ます。なのでその瞬間に限って言うとイベントの処理時間を無視すれば貯蓄していた 10 トークン分のイベント + 秒間に補填される 5 トークンで 15 rps までバーストすることが出来るといったような感じです。</p>
+
+<p>使用方法としてまず初めに <code class="language-plaintext highlighter-rouge">NewLimiter</code> 関数を使用して制限するための Limiter を作成します。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// func NewLimiter(r Limit , b int) *Limiter</span>
+<span class="n">limiter</span> <span class="o">:=</span> <span class="n">rate</span><span class="o">.</span><span class="n">NewLimiter</span><span class="p">(</span><span class="m">5</span><span class="p">,</span> <span class="m">1</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>第一引数がトークンが秒間に溜まる速度、第二引数がトークンバケットのサイズです。この例でいうと秒間 5 トークン補充されるので最大 5 rps までイベントを実行することが出来ますが、トークンバケットのサイズは 1 なのでトークンを 1 つしかストック出来ないのでバーストすることは出来ません。</p>
+
+<p><code class="language-plaintext highlighter-rouge">Every</code> 関数で interval の間隔でトークンが 1 つ補充されるという指定をすることも出来ます。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// func Every(interval time.Duration) Limit</span>
+<span class="n">limiter</span> <span class="o">:=</span> <span class="n">rate</span><span class="o">.</span><span class="n">NewLimiter</span><span class="p">(</span><span class="n">rate</span><span class="o">.</span><span class="n">Every</span><span class="p">(</span><span class="m">300</span><span class="o">*</span><span class="n">time</span><span class="o">.</span><span class="n">Millisecond</span><span class="p">),</span> <span class="m">1</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>この例の場合は 300 ms 毎にトークンが 1 つ補填されるようになり、約 3.3 rps のペースでイベントを実行する事が出来ます。</p>
+
+<p>その後に <code class="language-plaintext highlighter-rouge">Wait</code> 関数を使用してイベントの実行が許可されるまでブロックします。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">package</span> <span class="n">main</span>
+
+<span class="k">import</span> <span class="p">(</span>
+	<span class="s">"context"</span>
+	<span class="s">"fmt"</span>
+	<span class="s">"sync"</span>
+	<span class="s">"time"</span>
+
+	<span class="s">"golang.org/x/time/rate"</span>
+<span class="p">)</span>
+
+<span class="k">func</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
+	<span class="n">ctx</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">Background</span><span class="p">()</span>
+	<span class="k">var</span> <span class="n">wg</span> <span class="n">sync</span><span class="o">.</span><span class="n">WaitGroup</span>
+
+	<span class="n">limiter</span> <span class="o">:=</span> <span class="n">rate</span><span class="o">.</span><span class="n">NewLimiter</span><span class="p">(</span><span class="m">5</span><span class="p">,</span> <span class="m">1</span><span class="p">)</span>
+
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="m">30</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="n">wg</span><span class="o">.</span><span class="n">Add</span><span class="p">(</span><span class="m">1</span><span class="p">)</span>
+		<span class="n">i</span> <span class="o">:=</span> <span class="n">i</span>
+		<span class="k">go</span> <span class="k">func</span><span class="p">()</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">limiter</span><span class="o">.</span><span class="n">Wait</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="nb">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+			<span class="p">}</span>
+			<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s">"%s: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">(),</span> <span class="n">i</span><span class="p">)</span>
+			<span class="n">wg</span><span class="o">.</span><span class="n">Done</span><span class="p">()</span>
+		<span class="p">}()</span>
+	<span class="p">}</span>
+	<span class="n">wg</span><span class="o">.</span><span class="n">Wait</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>このコードの <a href="https://go.dev/play/p/wyq7rAhZSUN">Playground がこちら</a> で、以下のような実行結果になります。</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2009-11-10 23:00:00 +0000 UTC <span class="nv">m</span><span class="o">=</span>+0.000000001: 19
+2009-11-10 23:00:00.2 +0000 UTC <span class="nv">m</span><span class="o">=</span>+0.200000001: 14
+2009-11-10 23:00:00.4 +0000 UTC <span class="nv">m</span><span class="o">=</span>+0.400000001: 11
+2009-11-10 23:00:00.6 +0000 UTC <span class="nv">m</span><span class="o">=</span>+0.600000001: 9
+2009-11-10 23:00:00.8 +0000 UTC <span class="nv">m</span><span class="o">=</span>+0.800000001: 10
+2009-11-10 23:00:01 +0000 UTC <span class="nv">m</span><span class="o">=</span>+1.000000001: 13
+2009-11-10 23:00:01.2 +0000 UTC <span class="nv">m</span><span class="o">=</span>+1.200000001: 4
+2009-11-10 23:00:01.4 +0000 UTC <span class="nv">m</span><span class="o">=</span>+1.400000001: 0
+2009-11-10 23:00:01.6 +0000 UTC <span class="nv">m</span><span class="o">=</span>+1.600000001: 1
+2009-11-10 23:00:01.8 +0000 UTC <span class="nv">m</span><span class="o">=</span>+1.800000001: 2
+2009-11-10 23:00:02 +0000 UTC <span class="nv">m</span><span class="o">=</span>+2.000000001: 3
+2009-11-10 23:00:02.2 +0000 UTC <span class="nv">m</span><span class="o">=</span>+2.200000001: 16
+2009-11-10 23:00:02.4 +0000 UTC <span class="nv">m</span><span class="o">=</span>+2.400000001: 15
+2009-11-10 23:00:02.6 +0000 UTC <span class="nv">m</span><span class="o">=</span>+2.600000001: 6
+2009-11-10 23:00:02.8 +0000 UTC <span class="nv">m</span><span class="o">=</span>+2.800000001: 5
+2009-11-10 23:00:03 +0000 UTC <span class="nv">m</span><span class="o">=</span>+3.000000001: 17
+2009-11-10 23:00:03.2 +0000 UTC <span class="nv">m</span><span class="o">=</span>+3.200000001: 18
+2009-11-10 23:00:03.4 +0000 UTC <span class="nv">m</span><span class="o">=</span>+3.400000001: 7
+2009-11-10 23:00:03.6 +0000 UTC <span class="nv">m</span><span class="o">=</span>+3.600000001: 8
+2009-11-10 23:00:03.8 +0000 UTC <span class="nv">m</span><span class="o">=</span>+3.800000001: 12
+
+Program exited.
+</code></pre></div></div>
+
+<p>ちゃんと想定通り秒間 5 rps でイベントを実行出来ていると思います。</p>
+
+<p>ただ、ここまでの内容であればこのライブラリを使用しなくても例えば <code class="language-plaintext highlighter-rouge">time.Ticker</code> を使用して 200 ms 間隔で処理をするだけでよかったりで <code class="language-plaintext highlighter-rouge">Limiter</code> を使うメリットをそこまで感じないかなと思いますが、このライブラリの面白い所は <code class="language-plaintext highlighter-rouge">Wait</code> で消費するトークンの量を指定することが出来る点にあります。トークンの量を指定する事で可能な面白い事の一つとして、トークンを byte に置き換えることでディスクやネットワークへの書き込みや読み込みの制限を簡単に実装することが出来ます。実現するには <code class="language-plaintext highlighter-rouge">WaitN</code> 関数を使います。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// 複数のトークンを一度に消費するので、トークンバケットの上限を 1 以上に設定します</span>
+<span class="n">limiter</span> <span class="o">:=</span> <span class="n">rate</span><span class="o">.</span><span class="n">NewLimiter</span><span class="p">(</span><span class="m">2</span><span class="p">,</span> <span class="m">8</span><span class="p">)</span>
+
+<span class="c">// limiter を生成した瞬間はトークンが最大まで溜まっている状態なので</span>
+<span class="c">// 動作確認のために一旦トークンを全て消費</span>
+<span class="n">limiter</span><span class="o">.</span><span class="n">WaitN</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="m">8</span><span class="p">)</span>
+
+<span class="c">// 4 トークン消費可能になるまでブロックする</span>
+<span class="n">limiter</span><span class="o">.</span><span class="n">WaitN</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="m">4</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>この指定の場合、<code class="language-plaintext highlighter-rouge">WaitN</code> で 4 トークンを要求しているのでトークンバケットが空の場合トークンが補填されまで 2 秒感の間 <code class="language-plaintext highlighter-rouge">WaitN</code> で処理がブロックされます。余談ですが <code class="language-plaintext highlighter-rouge">Wait</code> 関数は内部で 1 トークンを要求する <code class="language-plaintext highlighter-rouge">WantN</code> 関数の呼び出しとして実装されています。</p>
+
+<p>これを <code class="language-plaintext highlighter-rouge">io.Writer</code> の interface に合わせる事で以下のような物が実装可能になります。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">package</span> <span class="n">main</span>
+
+<span class="k">import</span> <span class="p">(</span>
+	<span class="s">"bytes"</span>
+	<span class="s">"context"</span>
+	<span class="s">"fmt"</span>
+	<span class="s">"io"</span>
+	<span class="s">"math/rand"</span>
+	<span class="s">"time"</span>
+
+	<span class="s">"golang.org/x/time/rate"</span>
+<span class="p">)</span>
+
+<span class="k">func</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
+	<span class="c">// 500 KB</span>
+	<span class="n">data</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">([]</span><span class="kt">byte</span><span class="p">,</span> <span class="m">500</span><span class="o">*</span><span class="m">1024</span><span class="p">)</span>
+	<span class="n">rand</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+	<span class="n">reader</span> <span class="o">:=</span> <span class="n">bytes</span><span class="o">.</span><span class="n">NewReader</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+	<span class="n">writer</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">bytes</span><span class="o">.</span><span class="n">Buffer</span><span class="p">{}</span>
+	<span class="c">// 100 KB ずつトークンが補填され、秒間最大で 100 KBまで読み書きが行われる</span>
+	<span class="n">limiter</span> <span class="o">:=</span> <span class="n">rate</span><span class="o">.</span><span class="n">NewLimiter</span><span class="p">(</span><span class="m">100</span><span class="o">*</span><span class="m">1024</span><span class="p">,</span> <span class="m">100</span><span class="o">*</span><span class="m">1024</span><span class="p">)</span>
+	<span class="n">limiter</span><span class="o">.</span><span class="n">WaitN</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">TODO</span><span class="p">(),</span> <span class="m">100</span><span class="o">*</span><span class="m">1024</span><span class="p">)</span> <span class="c">// 最初に溜まっている全てのトークンを消費</span>
+
+	<span class="n">rw</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">ReadWriter</span><span class="p">{</span><span class="n">w</span><span class="o">:</span> <span class="n">writer</span><span class="p">,</span> <span class="n">r</span><span class="o">:</span> <span class="n">reader</span><span class="p">,</span> <span class="n">limiter</span><span class="o">:</span> <span class="n">limiter</span><span class="p">}</span>
+
+	<span class="n">readStart</span> <span class="o">:=</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">()</span>
+
+	<span class="c">// 500 KB のデータを一括で読み込む</span>
+	<span class="n">buf</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">([]</span><span class="kt">byte</span><span class="p">,</span> <span class="m">500</span><span class="o">*</span><span class="m">1024</span><span class="p">)</span>
+	<span class="n">n</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">rw</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
+	<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+		<span class="nb">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">buf</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">!=</span> <span class="n">buf</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="p">{</span>
+			<span class="nb">panic</span><span class="p">(</span><span class="s">"OMG!"</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="c">// 5 秒でデータを読み切る</span>
+	<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s">"readed %d bytes in %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">Since</span><span class="p">(</span><span class="n">readStart</span><span class="p">))</span>
+
+	<span class="n">writeStart</span> <span class="o">:=</span> <span class="n">time</span><span class="o">.</span><span class="n">Now</span><span class="p">()</span>
+
+	<span class="c">// 500 KB のデータを一括で書き込む</span>
+	<span class="n">n</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">rw</span><span class="o">.</span><span class="n">Write</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+	<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+		<span class="nb">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="n">buf</span> <span class="o">=</span> <span class="n">writer</span><span class="o">.</span><span class="n">Bytes</span><span class="p">()</span>
+	<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">buf</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">!=</span> <span class="n">buf</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="p">{</span>
+			<span class="nb">panic</span><span class="p">(</span><span class="s">"OMG!"</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="c">// 5 秒でデータを読み切る</span>
+	<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s">"wrote %d bytes in %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">Since</span><span class="p">(</span><span class="n">writeStart</span><span class="p">))</span>
+<span class="p">}</span>
+
+<span class="k">type</span> <span class="n">ReadWriter</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">w</span>       <span class="n">io</span><span class="o">.</span><span class="n">Writer</span>
+	<span class="n">r</span>       <span class="n">io</span><span class="o">.</span><span class="n">Reader</span>
+	<span class="n">limiter</span> <span class="o">*</span><span class="n">rate</span><span class="o">.</span><span class="n">Limiter</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">rw</span> <span class="o">*</span><span class="n">ReadWriter</span><span class="p">)</span> <span class="n">Read</span><span class="p">(</span><span class="n">p</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">)</span> <span class="p">(</span><span class="kt">int</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">var</span> <span class="n">n</span> <span class="kt">int</span>
+
+	<span class="k">for</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="p">{</span>
+		<span class="c">// 一度に消費できるトークンの最大値に合わせて一度に読み込む量を調整する</span>
+		<span class="n">size</span> <span class="o">:=</span> <span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="n">n</span><span class="o">:</span><span class="p">])</span>
+		<span class="k">if</span> <span class="n">size</span> <span class="o">&gt;</span> <span class="n">rw</span><span class="o">.</span><span class="n">limiter</span><span class="o">.</span><span class="n">Burst</span><span class="p">()</span> <span class="p">{</span>
+			<span class="n">size</span> <span class="o">=</span> <span class="n">rw</span><span class="o">.</span><span class="n">limiter</span><span class="o">.</span><span class="n">Burst</span><span class="p">()</span>
+		<span class="p">}</span>
+
+		<span class="n">rn</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">rw</span><span class="o">.</span><span class="n">r</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="n">n</span> <span class="o">:</span> <span class="n">n</span><span class="o">+</span><span class="n">size</span><span class="p">])</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="n">err</span>
+		<span class="p">}</span>
+		<span class="n">n</span> <span class="o">+=</span> <span class="n">rn</span>
+
+		<span class="c">// 読み込んだバイト数をトークンに見立てて消費させる事で秒間の読込レートを制御する</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">rw</span><span class="o">.</span><span class="n">limiter</span><span class="o">.</span><span class="n">WaitN</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">TODO</span><span class="p">(),</span> <span class="n">rn</span><span class="p">);</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="n">err</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="no">nil</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="p">(</span><span class="n">rw</span> <span class="o">*</span><span class="n">ReadWriter</span><span class="p">)</span> <span class="n">Write</span><span class="p">(</span><span class="n">b</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">)</span> <span class="p">(</span><span class="kt">int</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">var</span> <span class="n">n</span> <span class="kt">int</span>
+
+	<span class="k">for</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+		<span class="c">// 一度に消費できるトークンの最大値に合わせて一度に書き込む量を調整する</span>
+		<span class="n">size</span> <span class="o">:=</span> <span class="nb">len</span><span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="n">n</span><span class="o">:</span><span class="p">])</span>
+		<span class="k">if</span> <span class="n">size</span> <span class="o">&gt;</span> <span class="n">rw</span><span class="o">.</span><span class="n">limiter</span><span class="o">.</span><span class="n">Burst</span><span class="p">()</span> <span class="p">{</span>
+			<span class="n">size</span> <span class="o">=</span> <span class="n">rw</span><span class="o">.</span><span class="n">limiter</span><span class="o">.</span><span class="n">Burst</span><span class="p">()</span>
+		<span class="p">}</span>
+
+		<span class="n">wn</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">rw</span><span class="o">.</span><span class="n">w</span><span class="o">.</span><span class="n">Write</span><span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="n">n</span> <span class="o">:</span> <span class="n">n</span><span class="o">+</span><span class="n">size</span><span class="p">])</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="n">err</span>
+		<span class="p">}</span>
+		<span class="n">n</span> <span class="o">+=</span> <span class="n">wn</span>
+
+		<span class="c">// 書き込んだバイト数をトークンに見立てて消費させる事で秒間の書込レートを制御する</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">rw</span><span class="o">.</span><span class="n">limiter</span><span class="o">.</span><span class="n">WaitN</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">TODO</span><span class="p">(),</span> <span class="n">wn</span><span class="p">);</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="n">err</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="no">nil</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>このコードの <a href="https://go.dev/play/p/NyyYhBiBP1E">Playground がこちら</a> で、以下のような実行結果になります。</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>readed 512000 bytes <span class="k">in </span>5s
+wrote 512000 bytes <span class="k">in </span>5s
+
+Program exited.
+</code></pre></div></div>
+
+<p>特にこの例では Go の <code class="language-plaintext highlighter-rouge">io.Writer</code> と <code class="language-plaintext highlighter-rouge">io.Reader</code> の汎用性の高さや強力さも相まって簡単な実装だけであらゆる書込と読込の速度を制御する事が出来る <code class="language-plaintext highlighter-rouge">ReadWriter</code> をここまで簡単に実装する事が出来ています。ほかにもトークンの予約を行うための <code class="language-plaintext highlighter-rouge">Reserve</code> 関数や動的に Limit を変更するための <code class="language-plaintext highlighter-rouge">SetLimit</code> 関数などがあるのでプログラマブルに挙動を変える事も可能です。トークンを何に見立てるかのアイディア次第ではもっと面白い使い方もある事でしょう。</p>
+
+<h2 id="sometimes">Sometimes</h2>
+
+<p><code class="language-plaintext highlighter-rouge">Sometimes</code> はとても小さなライブラリで時間と回数に応じたイベントの実行タイミングを制限することが出来ます。具体的には</p>
+
+<ul>
+  <li>最初の n 回だけ実行する</li>
+  <li>n 回毎に実行する</li>
+  <li>n 秒毎に実行する</li>
+</ul>
+
+<p>を or の組み合わせで制御することが出来ます。</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span> <span class="n">Sometimes</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">First</span>    <span class="kt">int</span>           <span class="c">// 指定した数を N とした場合、最初の N 回分だけ実行する</span>
+	<span class="n">Every</span>    <span class="kt">int</span>           <span class="c">// 指定した数を N とした場合、N 回毎に実行する</span>
+	<span class="n">Interval</span> <span class="n">time</span><span class="o">.</span><span class="n">Duration</span> <span class="c">// 最後に実行した時間から Interval 分時間が経過していればもう一度実行する</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>なので例えば</p>
+
+<ul>
+  <li>最初の 10 回はログを出力したい</li>
+  <li>10 回を超えた後は 1 秒に 1 回だけログを出力してくれれば良い</li>
+</ul>
+
+<p>という指定を行いたい場合は</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">var</span> <span class="n">sometimes</span> <span class="o">=</span> <span class="n">rate</span><span class="o">.</span><span class="n">Sometimes</span><span class="p">{</span><span class="n">First</span><span class="o">:</span> <span class="m">10</span><span class="p">,</span> <span class="n">Interval</span><span class="o">:</span> <span class="m">1</span><span class="o">*</span><span class="n">time</span><span class="o">.</span><span class="n">Second</span><span class="p">}</span>
+
+<span class="k">func</span> <span class="n">Spammy</span><span class="p">()</span> <span class="p">{</span>
+        <span class="n">sometimes</span><span class="o">.</span><span class="n">Do</span><span class="p">(</span><span class="k">func</span><span class="p">()</span> <span class="p">{</span> <span class="n">log</span><span class="o">.</span><span class="n">Info</span><span class="p">(</span><span class="s">"here I am!"</span><span class="p">)</span> <span class="p">})</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>といった感じで指定する事が可能です。ただ <code class="language-plaintext highlighter-rouge">Sometimes</code> に関しては機能が少なく、実際に使用する場合には n 秒毎に x 回 (例えば 10 秒ごとに 50 件だけログを出力) といった形で x 秒毎に First をリセットしたいとか、もう少し細かい制御を行いたいケースも多いので <code class="language-plaintext highlighter-rouge">Sometimes</code> を直接使える機会はそこまで多くないかもしれません。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[golang.org/x には Go プロジェクト配下なんだけどメインツリー外の、いわゆる準標準的なライブラリが管理されています。Go の language server 実装である gopls なんかもこの配下で管理されていて、Go 本体よりゆるい互換性で開発されていると明言されている通り割とアグレッシブで面白い機能を持ったライブラリがあります。ライブラリから機能に対するインスピレーションを得られる事も多々あるので、今回はその中から適当に面白い奴として golang.org/x/time/rate を取り上げます。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">なぜ今またブログを書き始めるのか</title><link href="https://daichi.dev/posts/2022-12-27-blog-is-back" rel="alternate" type="text/html" title="なぜ今またブログを書き始めるのか" /><published>2022-12-27T00:00:00+09:00</published><updated>2022-12-27T00:00:00+09:00</updated><id>https://daichi.dev/posts/blog-is-back</id><content type="html" xml:base="https://daichi.dev/posts/2022-12-27-blog-is-back"><![CDATA[<p>ブログのような物を書かなくなってもう随分になる。人は仕事や現状に満足するとどんどんブログを書かなくなってしまうと昔誰かが言っていたけどその通りで、自分の場合は子供が生まれた事で子育てに追われる充実感や仕事上の役職やお賃金が上がりプログラマとしてのプレゼンスの向上に執着しなくなっていったというような実感がある。</p>
+
+<p>昔は別にブログという形でアウトプットがなくても仕事で使う場面は多く、例えばファイルシステムやプロセスやネットワーク周りの知識とかカーネルチューニングの方法などは覚えてすぐに活用する機会が沢山あった。今ではコンテナ化してしまって直接触ることが随分と減ってしまったような部分の知識は思ってる以上に容赦なく失われていっている実感がある。今使っていなくて失われていっている知識の大半は淘汰されて消えていく運命にあるのでまあ良いのだけど、基礎となる知識は知っているか知らないかで大きく差が出る瞬間が絶対にあるので、今使わないから忘れちゃってヨシ！とはならないよなぁというぼんやりとした不安を最近はずっと抱えていた。</p>
 
 <p>最近たまたま昔に書いた自分のブログを読み返すことがあり、そこで驚いたのは自分で書いた文章には自分が思っている以上に当時のコンテキストが埋まっているという点だ。当時使っていたミドルウェアに関する物で今はもう使わなくなっており頭から完全に抜け落ちていたのだけど、何年も前で一切覚えてなかったことに関してもやっぱり手を動かして自分で書いた記事だと思った以上に当時の記憶が残っている様で、自分で書いた記事ってこんなに便利だったっけという、まあ何を今更当たり前の事を言っているんだという感じではあるけど。</p>
 
 <p>というわけで、昔は結局有名になりたいとかそういう邪な目的でしかブログを書いてなくてこんなにも当たり前の事に対して今更という感じではあるけど、これまで自分の中に蓄えてきた知識や新しく学んだことに対してしばらくの間は積極的にブログを書いてみようと思う。図らずもタイミング的にも来年に向けての抱負みたいになっちゃたけど、とりあえず先ずは月１本を目標に頑張っていこうと思う。</p>
 
-<p>昔から形から入るタイプなので、心機一転してドメインだけ持ってた <code class="language-plaintext highlighter-rouge">daichi.dev</code> を運用することにして新しくブログのテンプレートを自作した。スタイルは最近定番の <a href="https://tailwindcss.com/">Tailwind CSS</a> を使ってみたが思ったよりも使いやすかったので仕事でも使う機会も出てくるかもしれない。昔のブログに関してはこのブログにリダイレクトするように設定しているけど、再来年のドメインの更新のタイミングくらいで捨てちゃっても良いかなと思っている。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[ブログのような物を書かなくなってもう随分になる。人は仕事や現状に満足するとどんどんブログを書かなくなってしまうと昔誰かが言っていたけどその通りで、自分の場合は子供が生まれた事で子育てに追われる充実感や仕事上の役職やお賃金が上がりプログラマとしてのプレゼンスの向上に執着しなくなっていったというような実感がある。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話</title><link href="https://daichi.dev/posts/2017-12-15-fluent-logger-go" rel="alternate" type="text/html" title="本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話" /><published>2017-12-15T00:00:00+09:00</published><updated>2017-12-15T00:00:00+09:00</updated><id>https://daichi.dev/posts/fluent-logger-go</id><content type="html" xml:base="https://daichi.dev/posts/2017-12-15-fluent-logger-go"><![CDATA[<p>この記事は<a href="https://qiita.com/advent-calendar/2017/go4">Go4 Advent Calendar 2017</a>の12/15のエントリです。</p>
+<p>形から入るタイプなので、心機一転してドメインだけ持ってた <code class="language-plaintext highlighter-rouge">daichi.dev</code> を運用することにして新しくブログのテンプレートを自作した。スタイルは最近定番の <a href="https://tailwindcss.com/">Tailwind CSS</a> を使ってみたが思ったよりも使いやすかったので仕事でも使う機会も出てくるかもしれない。昔のブログに関してはこのブログにリダイレクトするように設定しているけど、再来年のドメインの更新のタイミングくらいで捨てちゃっても良いかなと思っている。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[ブログのような物を書かなくなってもう随分になる。人は仕事や現状に満足するとどんどんブログを書かなくなってしまうと昔誰かが言っていたけどその通りで、自分の場合は子供が生まれた事で子育てに追われる充実感や仕事上の役職やお賃金が上がりプログラマとしてのプレゼンスの向上に執着しなくなっていったというような実感がある。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話</title><link href="https://daichi.dev/posts/2017-12-15-fluent-logger-go" rel="alternate" type="text/html" title="本番導入出来なかったけどGoでちょっと早いfluent-loggerを作った時の話" /><published>2017-12-15T00:00:00+09:00</published><updated>2017-12-15T00:00:00+09:00</updated><id>https://daichi.dev/posts/fluent-logger-go</id><content type="html" xml:base="https://daichi.dev/posts/2017-12-15-fluent-logger-go"><![CDATA[<p>この記事は<a href="https://qiita.com/advent-calendar/2017/go4">Go4 Advent Calendar 2017</a>の12/15のエントリです。</p>
 
 <p><a href="https://qiita.com/advent-calendar/2017/go2">Go2 Advent Calendar 2017</a>の１日目の記事で、<a href="https://medium.com/@lestrrat/go-fluent-client%E3%81%AE%E7%B4%B9%E4%BB%8B-312e90fb0668">go-fluent-clientの紹介</a> という lestrrat さんの投稿があり、そういえば今年の初めに転職やら色々あって導入までは出来なかった Go の fluent-logger 作ったなということを思い出したので、当時どんな感じで作っていたかを踏まえて簡単に紹介してみようと思います。</p>
 
@@ -462,7 +726,7 @@ ok  	github.com/lestrrat/go-fluent-client	10.610s
 
 <p><a href="https://martinfowler.com/bliki/CircuitBreaker.html">https://martinfowler.com/bliki/CircuitBreaker.html</a></p>
 
-<p><a href="https://www.amazon.co.jp/Release-本番用ソフトウェア製品の設計とデプロイのために-Michael-T-Nygard/dp/4274067491">Release-本番用ソフトウェア製品の設計とデプロイのために-Michael-T-Nygard</a></p>
+<p><a href="https://www.amazon.co.jp/Release-%E6%9C%AC%E7%95%AA%E7%94%A8%E3%82%BD%E3%83%95%E3%83%88%E3%82%A6%E3%82%A7%E3%82%A2%E8%A3%BD%E5%93%81%E3%81%AE%E8%A8%AD%E8%A8%88%E3%81%A8%E3%83%87%E3%83%97%E3%83%AD%E3%82%A4%E3%81%AE%E3%81%9F%E3%82%81%E3%81%AB-Michael-T-Nygard/dp/4274067491">Release-本番用ソフトウェア製品の設計とデプロイのために-Michael-T-Nygard</a></p>
 
 <p>どちらかと言うとマイクロサービスのコンテキストで語られることが多くて、複数サービス間で構築されたシステムにおいて、あるシステムに障害が発生した場合に名前の通りそのシステムを遮断して全体影響を抑える様な役割と、実行結果の成功や失敗のイベントを一箇所で管理して検知しやすくするための役割がある。Exponential Backoff などのように処理を再試行するための物ではなく、処理を実行させないようにするところに大きな違いがある。</p>
 
@@ -1803,309 +2067,4 @@ irb<span class="o">(</span>main<span class="o">)</span>:001:0&gt; Rust.new.fib<s
 
 <p>まあ実際にやってみるとActiveRecordの設計から大きく外れないように設計し、更には内部のAPIなどを極力呼ばない様に作っていくの抜け道を探しているような、パズルをしているような間隔でそれはそれで楽しいものだ。一種の縛りプレイをやっているような感覚に近いかもしれない。</p>
 
-<p>もう少し設計が固まってきたら、また纏めたいと思う。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[前回の続き]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">ブログをHerokuからOpenShiftに移行する</title><link href="https://daichi.dev/posts/2015-11-30-heroku-to-openshift" rel="alternate" type="text/html" title="ブログをHerokuからOpenShiftに移行する" /><published>2015-11-30T00:00:00+09:00</published><updated>2015-11-30T00:00:00+09:00</updated><id>https://daichi.dev/posts/heroku-to-openshift</id><content type="html" xml:base="https://daichi.dev/posts/2015-11-30-heroku-to-openshift"><![CDATA[<p><img src="/assets/images/posts/2015-11-30-heroku-to-openshift/top.png" alt="" /></p>
-
-<p>Herokuを無料で使い続けることが難しくなってしまい、<a href="http://a-newcomer.com">以前のブログ</a>(Sinatra/<a href="https://github.com/lokka/lokka">Lokka</a>)はどこかに移行しておきたいと思い色々検討した。</p>
-
-<p>意外とHerokuの様に使えるPassがなくて、低スペックとはいえ無料で無制限にっていうのは色々と難しい所あったのかなーとか思いつつもとりあえず、ブログだけ移行できればよかったので3つのアプリまでは無料で動かすことが出来て、Herokuライクに使えそうな<a href="https://www.openshift.com">OpenShift Online</a>に移行してみた。
-Onlineの方はDockerを使ったOpenShift v3ではなくGearとかCartridgeの奴。</p>
-
-<h2 id="rhc">rhc</h2>
-
-<p>WebConsoleも不自由しないくらいには作りこまれているが<a href="https://developers.openshift.com">OpenShift Developers</a>が全て<a href="https://github.com/openshift/rhc">rhc</a>コマンドなので、先ずはrhcをインストールする。大体herokuコマンドのような物だと思えば良い。</p>
-
-<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>gem <span class="nb">install </span>rhc
-</code></pre></div></div>
-
-<p>ちなみに、OpenShift Developersは結構細かくドキュメントが記載されていて正直ここを見ながらやるだけで特に移行に困ることはなかったの結構良かった。</p>
-
-<p>次に、rhcのセットアップを行う。</p>
-
-<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc setup
-</code></pre></div></div>
-
-<p>聞かれたとおりに登録メールアドレスやパスワードを入力していく。初めのほうで</p>
-
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>If you have your own OpenShift server, you can specify it now. Just hit enter to use the server for OpenShift Online: openshift.redhat.com.
-Enter the server hostname: |openshift.redhat.com|
-</code></pre></div></div>
-
-<p>と聞かれるかもしれないが、今回はOpenShift OnlineなのでそのままEnterで問題ない。</p>
-
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Please enter a namespace (letters and numbers only) |&lt;none&gt;|:
-</code></pre></div></div>
-
-<p>の部分に関してはユーザーごとのnamespaceを自分で決めることが出来てそれがドメインの一部になる。
-私はdaichをnamespaceにしたのでアプリは http://xxxx-daich.rhcloud.com というFQDNが割り当てられることになる。</p>
-
-<h2 id="application">Application</h2>
-
-<p>今のところ作成可能なアプリケーションは以下のとおり。</p>
-
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Do-It-Yourself 0.1                      rhc create-app &lt;app name&gt; diy-0.1
-JBoss Application Server 7              rhc create-app &lt;app name&gt; jbossas-7
-JBoss Data Virtualization 6             rhc create-app &lt;app name&gt; jboss-dv-6.1.0
-JBoss Enterprise Application Platform 6 rhc create-app &lt;app name&gt; jbosseap-6
-JBoss Unified Push Server 1.0.0.Beta1   rhc create-app &lt;app name&gt; jboss-unified-push-1
-JBoss Unified Push Server 1.0.0.Beta2   rhc create-app &lt;app name&gt; jboss-unified-push-2
-Jenkins Server                          rhc create-app &lt;app name&gt; jenkins-1
-Node.js 0.10                            rhc create-app &lt;app name&gt; nodejs-0.10
-PHP 5.3                                 rhc create-app &lt;app name&gt; php-5.3
-PHP 5.4                                 rhc create-app &lt;app name&gt; php-5.4
-PHP 5.4 with Zend Server 6.1            rhc create-app &lt;app name&gt; zend-6.1
-Perl 5.10                               rhc create-app &lt;app name&gt; perl-5.10
-Python 2.6                              rhc create-app &lt;app name&gt; python-2.6
-Python 2.7                              rhc create-app &lt;app name&gt; python-2.7
-Python 3.3                              rhc create-app &lt;app name&gt; python-3.3
-Ruby 1.8                                rhc create-app &lt;app name&gt; ruby-1.8
-Ruby 1.9                                rhc create-app &lt;app name&gt; ruby-1.9
-Ruby 2.0                                rhc create-app &lt;app name&gt; ruby-2.0
-Tomcat 6 (JBoss EWS 1.0)                rhc create-app &lt;app name&gt; jbossews-1.0
-Tomcat 7 (JBoss EWS 2.0)                rhc create-app &lt;app name&gt; jbossews-2.0
-Vert.x 2.1                              rhc create-app &lt;app name&gt; jboss-vertx-2.1
-WildFly Application Server 10           rhc create-app &lt;app name&gt; jboss-wildfly-10
-WildFly Application Server 8.2.1.Final  rhc create-app &lt;app name&gt; jboss-wildfly-8
-WildFly Application Server 9            rhc create-app &lt;app name&gt; jboss-wildfly-9
-</code></pre></div></div>
-
-<p>Sinatraを動かしたいのでRuby 2.0を使用する。</p>
-
-<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc app create anewcomer ruby-2.0
-
-Application Options
-<span class="nt">-------------------</span>
-Domain:     daich
-Cartridges: ruby-2.0
-Gear Size:  default
-Scaling:    no
-
-Creating application <span class="s1">'anewcomer'</span> ... <span class="k">done
-
-</span>Waiting <span class="k">for </span>your DNS name to be available ... <span class="k">done
-
-</span>Cloning into <span class="s1">'anewcomer'</span>...
-Warning: Permanently added the RSA host key <span class="k">for </span>IP address <span class="s1">'xxx.xxx.xxx.xxx'</span> to the list of known hosts.
-
-Your application <span class="s1">'anewcomer'</span> is now available.
-
-  URL:        http://anewcomer-daich.rhcloud.com/
-  SSH to:     xxxx
-  Git remote: xxxxx
-  Cloned to:  /path/to/dir/anewcomer
-
-Run <span class="s1">'rhc show-app anewcomer'</span> <span class="k">for </span>more details about your app.
-</code></pre></div></div>
-
-<p>後は出力されたGit remoteにpushするだけで良い。</p>
-
-<h2 id="database">Database</h2>
-
-<p>今のところ追加出来るCartridgeは以下のとおり。</p>
-
-<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc cartridge list
-
-jbossas-7                JBoss Application Server 7              web
-jboss-dv-6.1.0 <span class="o">(!)</span>       JBoss Data Virtualization 6             web
-jbosseap-6 <span class="o">(</span><span class="k">*</span><span class="o">)</span>           JBoss Enterprise Application Platform 6 web
-jboss-unified-push-1 <span class="o">(!)</span> JBoss Unified Push Server 1.0.0.Beta1   web
-jboss-unified-push-2 <span class="o">(!)</span> JBoss Unified Push Server 1.0.0.Beta2   web
-jenkins-1                Jenkins Server                          web
-nodejs-0.10              Node.js 0.10                            web
-perl-5.10                Perl 5.10                               web
-php-5.3                  PHP 5.3                                 web
-php-5.4                  PHP 5.4                                 web
-zend-6.1                 PHP 5.4 with Zend Server 6.1            web
-python-2.6               Python 2.6                              web
-python-2.7               Python 2.7                              web
-python-3.3               Python 3.3                              web
-ruby-1.8                 Ruby 1.8                                web
-ruby-1.9                 Ruby 1.9                                web
-ruby-2.0                 Ruby 2.0                                web
-jbossews-1.0             Tomcat 6 <span class="o">(</span>JBoss EWS 1.0<span class="o">)</span>                web
-jbossews-2.0             Tomcat 7 <span class="o">(</span>JBoss EWS 2.0<span class="o">)</span>                web
-jboss-vertx-2.1 <span class="o">(!)</span>      Vert.x 2.1                              web
-jboss-wildfly-10 <span class="o">(!)</span>     WildFly Application Server 10           web
-jboss-wildfly-8 <span class="o">(!)</span>      WildFly Application Server 8.2.1.Final  web
-jboss-wildfly-9 <span class="o">(!)</span>      WildFly Application Server 9            web
-diy-0.1                  Do-It-Yourself 0.1                      web
-cron-1.4                 Cron 1.4                                addon
-jenkins-client-1         Jenkins Client                          addon
-mongodb-2.4              MongoDB 2.4                             addon
-mysql-5.1                MySQL 5.1                               addon
-mysql-5.5                MySQL 5.5                               addon
-phpmyadmin-4             phpMyAdmin 4.0                          addon
-postgresql-8.4           PostgreSQL 8.4                          addon
-postgresql-9.2           PostgreSQL 9.2                          addon
-rockmongo-1.1            RockMongo 1.1                           addon
-switchyard-0             SwitchYard 0.8.0                        addon
-haproxy-1.4              Web Load Balancer                       addon
-
-Note: Web cartridges can only be added to new applications.
-
-<span class="o">(</span><span class="k">*</span><span class="o">)</span> denotes a cartridge with additional usage costs.
-
-<span class="o">(!)</span> denotes a cartridge that will not receive automatic security updates.
-</code></pre></div></div>
-
-<p>Herokuではデフォルトのまま使用していたのでPostgreSQLだったが今回はMySQL5.5を使用する。</p>
-
-<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc cartridge add mysql-5.5mysql-5.5 <span class="nt">--app</span> anewcomer
-
-Adding mysql-5.5 to application <span class="s1">'anewcomer'</span> ... <span class="k">done
-
-</span>mysql-5.5 <span class="o">(</span>MySQL 5.5<span class="o">)</span>
-<span class="nt">---------------------</span>
-  Gears:          Located with ruby-2.0
-  Connection URL: mysql://<span class="nv">$OPENSHIFT_MYSQL_DB_HOST</span>:<span class="nv">$OPENSHIFT_MYSQL_DB_PORT</span>/
-  Database Name:  xxxx
-  Password:       xxxx
-  Username:       xxxx
-
-MySQL 5.5 database added.  Please make note of these credentials:
-
-       Root User: xxxx
-   Root Password: xxxx
-   Database Name: xxxx
-
-Connection URL: mysql://<span class="nv">$OPENSHIFT_MYSQL_DB_HOST</span>:<span class="nv">$OPENSHIFT_MYSQL_DB_PORT</span>/
-
-You can manage your new MySQL database by also embedding phpmyadmin.
-The phpmyadmin username and password will be the same as the MySQL credentials above.
-</code></pre></div></div>
-
-<p>UserやPasswordが出力されているが、基本的にDBの情報は全て環境変数として提供されているのでそこからアクセスする。
-<a href="https://developers.openshift.com/en/databases-mysql.html">MySQL on OpenShift</a></p>
-
-<h2 id="heroku-to-openshift">Heroku to OpenShift</h2>
-
-<p>アプリケーションを作成した際に出来た初期リポジトリをクローンしてきて、中にある<code class="language-plaintext highlighter-rouge">.openshift</code>ディレクトリをherokuにDeployしているアプリにコピーしておく。
-その後openshiftをremoteとして追加してpushする。内部ではPassengerが動いていてRackベースのアプリはconfig.ruを元に起動する。</p>
-
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code># Template Repository Layout
-tmp/               Temporary storage
-public/            Content (images, CSS, etc. available to the public)
-config.ru          This file is used by Rack-based servers to start the application.
-.openshift/        Location for OpenShift specific files
-    action_hooks/  See the Action Hooks documentation
-    markers/       See the Markers section below
-</code></pre></div></div>
-
-<p>次にOpenShiftで動かすために変更した部分。</p>
-
-<p>database.yml</p>
-
-<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">production</span><span class="pi">:</span>
-  <span class="na">dsn</span><span class="pi">:</span> <span class="s">&lt;%= "#{ENV['OPENSHIFT_MYSQL_DB_URL']}/#{ENV['OPENSHIFT_APP_NAME']}" %&gt;</span>
-</code></pre></div></div>
-
-<p>Gemfile</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># RubyGemsミラーがOpenShift内部にあってこっちのほうが早い</span>
-<span class="c1"># https://developers.openshift.com/en/ruby-getting-started.html#_ruby_mirror</span>
-<span class="n">source</span> <span class="s1">'http://mirror.ops.rhcloud.com/mirror/ruby/'</span>
-
-<span class="c1"># 1.5.2でなければ動かない</span>
-<span class="n">gem</span> <span class="s1">'rack'</span><span class="p">,</span> <span class="s1">'1.5.2'</span>
-</code></pre></div></div>
-
-<p>config.ru</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># default_externalを直接指定しておかないとうまく動かない所がある。</span>
-<span class="c1"># Railsを参考にしたけどこの辺のベストプラクティスよくわかってない。</span>
-<span class="no">Encoding</span><span class="p">.</span><span class="nf">default_external</span> <span class="o">=</span> <span class="no">Encoding</span><span class="o">::</span><span class="no">UTF_8</span>
-<span class="no">Encoding</span><span class="p">.</span><span class="nf">default_internal</span> <span class="o">=</span> <span class="no">Encoding</span><span class="o">::</span><span class="no">UTF_8</span>
-</code></pre></div></div>
-
-<p>次に環境変数を設定する。人によっては不要かもしれない。</p>
-
-<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc <span class="nb">env set </span><span class="nv">RACK_ENV</span><span class="o">=</span>production <span class="nv">BUNDLE_WITHOUT</span><span class="o">=</span>development:test:postgresql <span class="nt">-a</span> anewcomer
-</code></pre></div></div>
-
-<p>最後に、Passengerのhot deployに対応させておく。</p>
-
-<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">touch</span> .openshift/markers/hot_deploy
-</code></pre></div></div>
-
-<p>.openshiftにはこういう設定や、DeployやStart等のActionHookを置いてくことになる。</p>
-
-<p>取り敢えずここで一旦remoteにpushしたらデプロイが実行されると思うので、
-その後sshで接続してrakeタスクを実行してDBをセットアップして動作確認を行う。</p>
-
-<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc app ssh anewcomer
-
-<span class="c"># $OPENSHIFT_REPO_DIRにデプロイされたアプリケーションのPathがセットされてる</span>
-<span class="o">&gt;</span> <span class="nb">cd</span> <span class="nv">$OPENSHIFT_REPO_DIR</span>
-<span class="o">&gt;</span> bundle <span class="nb">exec </span>rake db:setup <span class="nv">RACK_ENV</span><span class="o">=</span>production
-</code></pre></div></div>
-
-<p>特に問題がなければこれで一旦初期状態のアプリが表示されていると思う。</p>
-
-<h2 id="data-migration">Data Migration</h2>
-
-<p>データの移行には<a href="https://github.com/ricardochimal/taps">taps</a>を使う。</p>
-
-<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>gem i taps sqlite3 mysql pg
-</code></pre></div></div>
-
-<p>herokuはDBへのエンドポイントがあったがOpenShiftには多分無い。
-接続したい場合にはrhcにport-forwardを行うコマンドがあるのでそれで一時的に接続できるようにする。</p>
-
-<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rhc port-forward anewcomer
-
-Checking available ports ... <span class="k">done
-</span>Forwarding ports ...
-
-To connect to a service running on OpenShift, use the Local address
-
-Service Local                OpenShift
-<span class="nt">-------</span> <span class="nt">---------------</span> <span class="nt">----</span> <span class="nt">------------------</span>
-httpd   127.0.0.1:8080   <span class="o">=&gt;</span>  xx.xx.xx.xx:8080
-mysql   127.0.0.1:3306   <span class="o">=&gt;</span>  xx.xx.xx.xx:3306
-ruby    127.0.0.1:26226  <span class="o">=&gt;</span>  xx.xx.xx.xx:26226
-
-Press CTRL-C to terminate port forwarding
-</code></pre></div></div>
-
-<p>別ターミナルでtapsのサーバーを立てる。</p>
-
-<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>taps server <span class="s1">'mysql://username:password@127.0.0.1:3306/app_name?encoding=utf8'</span> tapsuser tapspass
-</code></pre></div></div>
-
-<p>MySQLの接続情報は作成時に表示さていた情報。わからない場合はsshしてechoするかWebConsoleで確認できるかも。</p>
-
-<p>あとはHerokuのPostgreSQLからpushする。</p>
-
-<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code>taps push <span class="s1">'postgres://username:password@xxx.xxx.xxx.xxx.compute-1.amazonaws.com:5432/dbname'</span> http://tapsuser:tapspass@localhost:5000
-</code></pre></div></div>
-
-<p>これだけで異なるミドルウェア・PaaS間でのデータ移行が済んでしまうtapsは最高に便利。</p>
-
-<h2 id="naked-domain">Naked Domain</h2>
-
-<p>OpenShiftもHerokuと同じようにCNAMEでのカスタムドメイン設定しか出来ないので、aliasだけ設定しておく</p>
-
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ rhc alias add anewcomer a-newcomer.com
-</code></pre></div></div>
-
-<p>あとはapex alias等の参照先を、最初に付与されたFQDN(anewcomer-daich.rhcloud.comとか)に設定すれば転送されるはず。</p>
-
-<h2 id="action-hook">Action Hook</h2>
-
-<p>最後に、pushするたびに自動的にmigrationを実行させたいので実行権限付きのファイルを.openshift/action_hooks/deployに置く。</p>
-
-<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">#!/bin/bash</span>
-
-<span class="nb">echo</span> <span class="s2">"Starting deploy script"</span>
-<span class="nb">cd</span> <span class="nv">$OPENSHIFT_REPO_DIR</span>
-
-bundle <span class="nb">exec </span>rake db:migrate <span class="nv">RACK_ENV</span><span class="o">=</span><span class="s2">"production"</span>
-</code></pre></div></div>
-
-<p>他にも色々なActionが用意されてるので大抵のことはカバーできそう。</p>
-
-<h2 id="終わり">終わり</h2>
-
-<p>結構調べながらやってたんだけどそこそこスムーズに移行できてよかった。
-OpenShiftも個人でブログを動かすくらいにしか使っていない分の使い勝手は全く問題ないと思う。</p>
-
-<p>ただ、ブログに対してアプリケーションを動かすこと自体がちょっとめんどくさくなってしまって今はGithub Pages + Jekyllで運用しているんだけど、こうやってちょっと頑張って移行した手前そのうち向こうのブログにも何か書いていきたい。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/posts/2015-11-30-heroku-to-openshift/top.png" /><media:content medium="image" url="https://daichi.dev/assets/images/posts/2015-11-30-heroku-to-openshift/top.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry></feed>
+<p>もう少し設計が固まってきたら、また纏めたいと思う。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[前回の続き]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry></feed>
