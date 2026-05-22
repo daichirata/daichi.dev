@@ -2,33 +2,37 @@
 layout: default
 ---
 
-<div class="mx-4 lg:m-auto lg:w-2/3 py-8 prose max-w-none">
-  <p class="text-2xl">{{ site.description }}</p>
-</div>
+<div class="max-w-3xl mx-auto px-4 sm:px-6">
+  <section class="pt-8 pb-12">
+    <p class="text-lg leading-relaxed text-slate-700">{{ site.description }}</p>
+    <div class="mt-6 h-1 w-16 rounded bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500"></div>
+  </section>
 
-<article class="mx-4 py-8 lg:m-auto lg:w-2/3 prose max-w-none content">
-  <h1 class="mb-0">Posts</h1>
-  {% for post in site.posts %}
-  {% assign currentdate = post.date | date: "%Y" %}
-  {% if currentdate != date %}
-  <h2 id="{{currentdate}}" class="mt-8">{{ currentdate }}</h2>
-  {% assign date = currentdate %}
-  {% endif %}
-  <div class="py-2">
-    <time class="block lg:inline-block lg:w-1/6 tracking-tight text-gray-800 font-extrabold" datetime="{{ page.date | date:"%Y-%m-%d" }}">{{ post.date | date: "%Y-%m-%d" }}</time>
-    <a class="text-2xl no-underline" href="{{ post.url }}">{{ post.title }}</a>
-  </div>
-  {% endfor %}
-</article>
-
-<div class="mx-4 lg:m-auto lg:w-2/3 py-8 prose max-w-none">
-  <h1>About</h1>
-
-  <div class="flex flex-row space-x-4 items-center not-prose mb-8">
-    <img class="h-24 w-24 rounded-full p-1 border-2 border-purple-500" src="/assets/images/avatar.png" alt="avatar">
-    <div>
-      <div class="text-xl font-medium text-black">Daichi Hirata</div>
-      <p class="text-slate-500">渋谷近辺で働いているソフトウェアエンジニア。ソーシャルゲームの開発や広告配信、スタートアップ CTO などをやったりしましたが今はコミュニケーションの会社でベッティングのシステムを作ってます。 昔は Ruby を沢山書いていたので心の友は Ruby ですが今は大体 Golang を使って開発しています。ソフトウェアアーキテクチャやシステムパフォーマンス周りに関心が強いです。</p>
+  <section class="py-8">
+    <h2 class="text-xs uppercase tracking-widest text-slate-500 font-semibold mb-6">Posts</h2>
+    {% for post in site.posts %}
+    {% assign currentdate = post.date | date: "%Y" %}
+    {% if currentdate != date %}
+    <h3 id="{{currentdate}}" class="mt-8 mb-2 text-xl font-bold text-slate-900">{{ currentdate }}</h3>
+    {% assign date = currentdate %}
+    {% endif %}
+    <div class="py-2 flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-5">
+      <time class="sm:w-24 shrink-0 text-sm font-mono text-slate-500" datetime="{{ post.date | date:"%Y-%m-%d" }}">{{ post.date | date: "%Y-%m-%d" }}</time>
+      <a class="text-lg text-slate-900 hover:text-indigo-600 transition-colors" href="{{ post.url }}">{{ post.title }}</a>
     </div>
-  </div>
+    {% endfor %}
+  </section>
+
+  <section class="py-8">
+    <h2 class="text-xs uppercase tracking-widest text-slate-500 font-semibold mb-6">About</h2>
+    <div class="flex flex-col sm:flex-row gap-5 items-start">
+      <div class="shrink-0 p-0.5 rounded-full bg-gradient-to-br from-pink-500 via-purple-500 to-indigo-500">
+        <img class="h-16 w-16 rounded-full ring-2 ring-white block" src="/assets/images/avatar.png" alt="avatar">
+      </div>
+      <div>
+        <div class="text-sm font-bold text-slate-900 mb-1">Daichi Hirata</div>
+        <p class="text-sm text-slate-600 leading-relaxed">渋谷あたりで働くソフトウェアエンジニア。ソシャゲ、広告配信、スタートアップ CTO といったあたりを色々やってきて、今はベッティングシステムを書いてます。心の友は Ruby、最近はだいたい Go。アーキテクチャとシステムパフォーマンスの話で盛り上がるのが好きです。</p>
+      </div>
+    </div>
+  </section>
 </div>
