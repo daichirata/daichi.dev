@@ -1,9 +1,8 @@
 ---
 ---
 
-@import "tailwindcss/base";
-@import "tailwindcss/components";
-@import "tailwindcss/utilities";
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 .content {
     /* Headings: solid color with subtle separator, no gradient */
