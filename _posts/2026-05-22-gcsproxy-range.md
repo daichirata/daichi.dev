@@ -35,18 +35,18 @@ Range: bytes=0-99,200-299    ← マルチレンジ
 
 `Range: bytes=abc-def` や `Range: bytes=500-100` のような Range の構文がそもそも壊れているケースについては、RFC 上は厳密に書かれていない印象。Go の `http.ServeContent` のように一律 416 にしているサーバもあれば、エラー時は ignore して 200 で返すサーバもある。リバースプロキシとしては「不正なヘッダで動いていたダウンロードを壊さない」方が運用上嬉しい場面が多いので、gcsproxy では後述するように後者寄せにした。
 
-## Range と Content-Encoding の交差点
+## Range と Content-Encoding
 
-Range の仕様自体はそんなに複雑ではないものの、`Content-Encoding` が絡むと話が一気に複雑になる。Range はあくまでサーバが選択した "representation" のバイト列に対するインデックスなので、サーバが `Content-Encoding: gzip` で返している場合、Range の N-M は「圧縮済みバイトの N-M」になる。これは一見問題なさそうに見えるけど、gzip のような stream 形式の圧縮はバイトの途中から受け取っても展開出来ないので、実用上はあまり機能しない。
-
-ここで GCS 特有の話として、GCS にオブジェクトを `Content-Encoding: gzip` 付きでアップロードした場合、ダウンロード時に GCS 側で「解凍済みのバイトを返す」というトランスコーディングがデフォルトで行われる、というのがある。便利な機能ではあるのだけど Range と組み合わせた時の挙動が直感的でなくて、実機で確認したところ次のようになった。
+GCS 特有の話として、GCS にオブジェクトを `Content-Encoding: gzip` 付きでアップロードした場合、ダウンロード時に GCS 側で「解凍済みのバイトを返す」というトランスコーディングがデフォルトで行われる、というのがある。便利な機能ではあるのだけど Range と組み合わせた時の挙動が直感的でなくて、実機で確認したところ次のようになった。
 
 ```
 === gzip object (Content-Encoding: gzip, 圧縮済サイズ 40 byte) ===
 NewRangeReader(0,10): len=20  body="0123456789abcdefghij"  ← 解凍済みの全 20 byte が返ってくる
 ```
 
-Range で 10 byte を要求したにも関わらず **解凍済みの全 20 byte が返ってくる**。なので gcsproxy としては gzip-stored なオブジェクトに対する Range リクエストは、`NewRangeReader` の戻り値を信頼してそのまま返してしまうと「206 を返しているのに body が要求バイト数を超える」という壊れたレスポンスになってしまう。対応案としては
+Range で 10 byte を要求したにも関わらず **解凍済みの全 20 byte が返ってくる**。なので gcsproxy としては gzip-stored なオブジェクトに対する Range リクエストは、`NewRangeReader` の戻り値を信頼してそのまま返してしまうと「206 を返しているのに body が要求バイト数を超える」という壊れたレスポンスになってしまう。
+
+対応案としては
 
 - そもそも gzip-stored なオブジェクトに対する Range は 416 で返す
 - Range を無視して 200 でフルボディを返す
