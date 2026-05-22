@@ -1,4 +1,110 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="ja_JP"><generator uri="https://jekyllrb.com/" version="4.3.1">Jekyll</generator><link href="https://daichi.dev/feed.xml" rel="self" type="application/atom+xml" /><link href="https://daichi.dev/" rel="alternate" type="text/html" hreflang="ja_JP" /><updated>2023-01-19T06:11:44+09:00</updated><id>https://daichi.dev/feed.xml</id><title type="html">daichi.dev</title><subtitle>プログラミングや日々開発してる上で感じた事、日常について書いています。</subtitle><entry><title type="html">golang.org/x/time/rate</title><link href="https://daichi.dev/posts/2023-01-19-golang-x-time-rate" rel="alternate" type="text/html" title="golang.org/x/time/rate" /><published>2023-01-19T00:00:00+09:00</published><updated>2023-01-19T00:00:00+09:00</updated><id>https://daichi.dev/posts/golang-x-time-rate</id><content type="html" xml:base="https://daichi.dev/posts/2023-01-19-golang-x-time-rate"><![CDATA[<p><a href="https://pkg.go.dev/golang.org/x">golang.org/x</a> には Go プロジェクト配下なんだけどメインツリー外の、いわゆる準標準的なライブラリが管理されています。Go の language server 実装である <a href="https://pkg.go.dev/golang.org/x/tools/gopls">gopls</a> なんかもこの配下で管理されていて、Go 本体よりゆるい互換性で開発されていると明言されている通り割とアグレッシブで面白い機能を持ったライブラリがあります。ライブラリから機能に対するインスピレーションを得られる事も多々あるので、今回はその中から適当に面白い奴として <code class="language-plaintext highlighter-rouge">golang.org/x/time/rate</code> を取り上げます。</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="ja_JP"><generator uri="https://jekyllrb.com/" version="4.4.1">Jekyll</generator><link href="https://daichi.dev/feed.xml" rel="self" type="application/atom+xml" /><link href="https://daichi.dev/" rel="alternate" type="text/html" hreflang="ja_JP" /><updated>2026-05-23T00:02:17+09:00</updated><id>https://daichi.dev/feed.xml</id><title type="html">daichi.dev</title><subtitle>プログラミングや日々開発してる上で感じた事、日常について書いています。</subtitle><entry><title type="html">gcsproxy で Range リクエストに対応した話</title><link href="https://daichi.dev/posts/2026-05-22-gcsproxy-range" rel="alternate" type="text/html" title="gcsproxy で Range リクエストに対応した話" /><published>2026-05-22T00:00:00+09:00</published><updated>2026-05-22T00:00:00+09:00</updated><id>https://daichi.dev/posts/gcsproxy-range</id><content type="html" xml:base="https://daichi.dev/posts/2026-05-22-gcsproxy-range"><![CDATA[<p>自分の趣味で開発している <a href="https://github.com/daichirata/gcsproxy">gcsproxy</a> という小さなツールがある。Google Cloud Storage の private なバケットの前段に置いてリバースプロキシとして動かす事で、アクセス制限を別レイヤーに押し付けたり、IAP の後ろで静的サイトを配信したりするためのもの。</p>
+
+<p>このプロジェクトに対して <a href="https://github.com/daichirata/gcsproxy/issues/40">Range リクエストに対応してほしいという Issue</a> がだいぶ前から来ていて、大きなオブジェクトを動画として配信する時のシークや、レジュームダウンロード、CDN からのオリジン読み出しなどでよく使われる機能なので対応してみる事にした。</p>
+
+<p>実は同じ機能を実現する <a href="https://github.com/daichirata/gcsproxy/pull/29">Pull Request #29</a> も既にあって、こちらは Go の stdlib にある <code class="language-plaintext highlighter-rouge">http.ServeContent</code> の内部実装をほぼそのまま gcsproxy 内に持ち込むスタイル。仕組み的にはこれでも動くのだけど 500 行を超える追加になっていて、stdlib の実装の更新を追従しなければいけないことも含めると個人的にはちょっとアプローチが合わないなという感じがあり、一旦 Range について真面目に調べ直して gcsproxy のユースケースに見合った実装を入れる事にした。</p>
+
+<h2 id="range-と-rfc">Range と RFC</h2>
+
+<p>HTTP の <code class="language-plaintext highlighter-rouge">Range</code> ヘッダの仕様は元々 RFC 7233 で定義されていて、現在は HTTP/1.1 の改訂版である <a href="https://httpwg.org/specs/rfc9110.html">RFC 9110</a> に統合されている。</p>
+
+<p>リクエスト側のフォーマットは</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Range: bytes=N-M
+Range: bytes=N-
+Range: bytes=-N
+Range: bytes=0-99,200-299    ← マルチレンジ
+</code></pre></div></div>
+
+<p>の四種類があって、サーバーが range をサポートする場合は</p>
+
+<ul>
+  <li>範囲が満たせる場合: <code class="language-plaintext highlighter-rouge">206 Partial Content</code> + <code class="language-plaintext highlighter-rouge">Content-Range: bytes N-M/&lt;total&gt;</code> で要求された部分を返す</li>
+  <li>範囲が満たせない場合: <code class="language-plaintext highlighter-rouge">416 Range Not Satisfiable</code> + <code class="language-plaintext highlighter-rouge">Content-Range: bytes */&lt;total&gt;</code> を返す</li>
+  <li>マルチレンジを満たす場合: <code class="language-plaintext highlighter-rouge">multipart/byteranges</code> の MIME メッセージとして複数の範囲をまとめて返す</li>
+</ul>
+
+<p>という挙動になる。一方でサーバーが range をサポートしている事を広告するための <code class="language-plaintext highlighter-rouge">Accept-Ranges: bytes</code> ヘッダや、クライアントがキャッシュ整合性のために送る <code class="language-plaintext highlighter-rouge">If-Range</code> ヘッダなど周辺の機能もそれなりにある。</p>
+
+<p>個人的に面白いと思う点として、「Range は MUST じゃない」事がある。つまり Range ヘッダを送って 416 を期待していたところで、サーバーが無視して 200 でフルボディを返しても仕様違反にはならない。<code class="language-plaintext highlighter-rouge">Range: items=0-10</code> のような非 <code class="language-plaintext highlighter-rouge">bytes</code> 単位の指定については RFC 9110 §14.2 に明確に “MUST ignore” と書かれていて、未知の単位を 416 にしてしまうのはむしろ仕様違反になる。</p>
+
+<blockquote>
+  <p>An origin server MUST ignore a Range header field that contains a range unit it does not understand.</p>
+</blockquote>
+
+<p><code class="language-plaintext highlighter-rouge">Range: bytes=abc-def</code> や <code class="language-plaintext highlighter-rouge">Range: bytes=500-100</code> のような Range の構文がそもそも壊れているケースについては、RFC 上は厳密に書かれていない印象。Go の <code class="language-plaintext highlighter-rouge">http.ServeContent</code> のように一律 416 にしているサーバもあれば、エラー時は ignore して 200 で返すサーバもある。リバースプロキシとしては「不正なヘッダで動いていたダウンロードを壊さない」方が運用上嬉しい場面が多いので、gcsproxy では後述するように後者寄せにした。</p>
+
+<h2 id="range-と-content-encoding">Range と Content-Encoding</h2>
+
+<p>GCS 特有の話として、GCS にオブジェクトを <code class="language-plaintext highlighter-rouge">Content-Encoding: gzip</code> 付きでアップロードした場合、ダウンロード時に GCS 側で「解凍済みのバイトを返す」というトランスコーディングがデフォルトで行われる、というのがある。便利な機能ではあるのだけど Range と組み合わせた時の挙動が直感的でなくて、実機で確認したところ次のようになった。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>=== gzip object (Content-Encoding: gzip, 圧縮済サイズ 40 byte) ===
+NewRangeReader(0,10): len=20  body="0123456789abcdefghij"  ← 解凍済みの全 20 byte が返ってくる
+</code></pre></div></div>
+
+<p>Range で 10 byte を要求したにも関わらず <strong>解凍済みの全 20 byte が返ってくる</strong>。なので gcsproxy としては gzip-stored なオブジェクトに対する Range リクエストは、<code class="language-plaintext highlighter-rouge">NewRangeReader</code> の戻り値を信頼してそのまま返してしまうと「206 を返しているのに body が要求バイト数を超える」という壊れたレスポンスになってしまう。</p>
+
+<p>対応案としては</p>
+
+<ul>
+  <li>そもそも gzip-stored なオブジェクトに対する Range は 416 で返す</li>
+  <li>Range を無視して 200 でフルボディを返す</li>
+</ul>
+
+<p>の二択になるが、リバースプロキシとしては機能的なものは出来るだけ提供したいので 200 フルボディを返す方を選択した。あと一応 <code class="language-plaintext highlighter-rouge">Accept-Ranges: bytes</code> の広告もしないようにして、行儀の良いクライアントが Range を投げない様にしている。</p>
+
+<h2 id="gcsproxy-ではどう実装したか">gcsproxy ではどう実装したか</h2>
+
+<p>Range の細かな仕様や GCS 特有の挙動を踏まえて、結果的に gcsproxy の Range 対応は次のような形に落ち着いた。</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>シナリオ</th>
+      <th>挙動</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">bytes=N-M</code> / <code class="language-plaintext highlighter-rouge">bytes=N-</code> / <code class="language-plaintext highlighter-rouge">bytes=-N</code> で範囲内</td>
+      <td><code class="language-plaintext highlighter-rouge">206 Partial Content</code> + <code class="language-plaintext highlighter-rouge">Content-Range</code> + 要求バイトのみ</td>
+    </tr>
+    <tr>
+      <td>マルチレンジ <code class="language-plaintext highlighter-rouge">bytes=0-99,200-299</code></td>
+      <td>最初の range のみを <code class="language-plaintext highlighter-rouge">206</code> で返す (<code class="language-plaintext highlighter-rouge">multipart/byteranges</code> は非対応)</td>
+    </tr>
+    <tr>
+      <td>範囲外 / <code class="language-plaintext highlighter-rouge">last &lt; first</code> (<code class="language-plaintext highlighter-rouge">bytes=500-100</code>)</td>
+      <td><code class="language-plaintext highlighter-rouge">416 Range Not Satisfiable</code> + <code class="language-plaintext highlighter-rouge">Content-Range: bytes */&lt;size&gt;</code></td>
+    </tr>
+    <tr>
+      <td>非 <code class="language-plaintext highlighter-rouge">bytes</code> 単位 (<code class="language-plaintext highlighter-rouge">items=0-10</code>)</td>
+      <td><code class="language-plaintext highlighter-rouge">200</code> でフルボディ (RFC 9110 §14.2 に従って ignore)</td>
+    </tr>
+    <tr>
+      <td>パース不能 (<code class="language-plaintext highlighter-rouge">bytes=abc-def</code>)</td>
+      <td><code class="language-plaintext highlighter-rouge">200</code> でフルボディ (MUST ignore を拡張)</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">Content-Encoding: gzip</code> なオブジェクト</td>
+      <td><code class="language-plaintext highlighter-rouge">200</code> でフルボディ (GCS の transcoding で Range が意味をなさない)</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">If-Range</code></td>
+      <td>第一版では未対応</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="language-plaintext highlighter-rouge">multipart/byteranges</code> 非対応や <code class="language-plaintext highlighter-rouge">If-Range</code> 非対応のような割り切りで実装をかなり小さく保てたのと、GCS の <code class="language-plaintext highlighter-rouge">NewRangeReader(ctx, offset, length)</code> という API が「offset と length を取って Range request を GCS にそのまま投げる」というそのものズバリな仕様だったお陰で、stdlib の <code class="language-plaintext highlighter-rouge">http.ServeContent</code> から実装を持ってくる必要が無く、結果的に追加コードは 100 行強 + テストで 300 行強位に収まった。</p>
+
+<p>stdlib の <code class="language-plaintext highlighter-rouge">http.ServeContent</code> がそれなりに大きいのは、<code class="language-plaintext highlighter-rouge">io.ReadSeeker</code> を入力として汎用的に動くように作られていて、ファイルサイズの取得や Seek 中のエラーハンドリング、<code class="language-plaintext highlighter-rouge">multipart/byteranges</code> のメッセージ生成、conditional request (<code class="language-plaintext highlighter-rouge">If-Match</code> や <code class="language-plaintext highlighter-rouge">If-None-Match</code>) の全セット対応など、汎用 HTTP file server として必要な物が全部入っているからで、gcsproxy のように既に GCS の object メタデータが手元にある状態で range API を呼ぶだけの薄いプロキシとしては必要のない物が大半だった、という構造的な違いがある。</p>
+
+<h2 id="おわり">おわり</h2>
+
+<p>ということで、gcsproxy で Range リクエストに対応しつつ、現実的なエッジケース (特に GCS の gzip transcoding) を踏まえた挙動に落ち着く事が出来た。Range は単純に見える機能の割に Content-Encoding 周りの相互作用が思いの外複雑で、stdlib のソースを読んだり実機で GCS の挙動を確認したりと意外と勉強になった。</p>
+
+<p>仕様としては未対応の <code class="language-plaintext highlighter-rouge">If-Range</code> (リクエストヘッダのバージョンが一致したら range、違ったら full body を返す機能) や、<code class="language-plaintext highlighter-rouge">multipart/byteranges</code> のサポートをどうするかは需要次第というところもあるので、第一版としてはこんなもんかなという感じ。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[自分の趣味で開発している gcsproxy という小さなツールがある。Google Cloud Storage の private なバケットの前段に置いてリバースプロキシとして動かす事で、アクセス制限を別レイヤーに押し付けたり、IAP の後ろで静的サイトを配信したりするためのもの。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">golang.org/x/time/rate</title><link href="https://daichi.dev/posts/2023-01-19-golang-x-time-rate" rel="alternate" type="text/html" title="golang.org/x/time/rate" /><published>2023-01-19T00:00:00+09:00</published><updated>2023-01-19T00:00:00+09:00</updated><id>https://daichi.dev/posts/golang-x-time-rate</id><content type="html" xml:base="https://daichi.dev/posts/2023-01-19-golang-x-time-rate"><![CDATA[<p><a href="https://pkg.go.dev/golang.org/x">golang.org/x</a> には Go プロジェクト配下なんだけどメインツリー外の、いわゆる準標準的なライブラリが管理されています。Go の language server 実装である <a href="https://pkg.go.dev/golang.org/x/tools/gopls">gopls</a> なんかもこの配下で管理されていて、Go 本体よりゆるい互換性で開発されていると明言されている通り割とアグレッシブで面白い機能を持ったライブラリがあります。ライブラリから機能に対するインスピレーションを得られる事も多々あるので、今回はその中から適当に面白い奴として <code class="language-plaintext highlighter-rouge">golang.org/x/time/rate</code> を取り上げます。</p>
 
 <p><a href="https://pkg.go.dev/golang.org/x/time/rate">golang.org/x/time/rate</a></p>
 
@@ -485,7 +591,7 @@ ok  	github.com/daichirata/fluent-logger-go/benchmark	6.666s
 <div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">MAX_RETRIES</span> <span class="o">=</span> <span class="mi">10</span>
 <span class="n">retries</span> <span class="o">=</span> <span class="mi">0</span>
 <span class="k">begin</span>
-    <span class="sr">//</span> <span class="err">何かの処理</span>
+    <span class="sr">//</span> <span class="n">何かの処理</span>
 <span class="k">rescue</span> <span class="o">=&gt;</span> <span class="n">e</span>
   <span class="k">if</span> <span class="n">retries</span> <span class="o">&lt;</span> <span class="no">MAX_RETRIES</span>
     <span class="n">retries</span> <span class="o">+=</span> <span class="mi">1</span>
@@ -699,7 +805,7 @@ ok  	github.com/lestrrat/go-fluent-client	10.610s
 <div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">MAX_RETRIES</span> <span class="o">=</span> <span class="mi">10</span>
 <span class="n">retries</span> <span class="o">=</span> <span class="mi">0</span>
 <span class="k">begin</span>
-    <span class="sr">//</span> <span class="err">何かの処理</span>
+    <span class="sr">//</span> <span class="n">何かの処理</span>
 <span class="k">rescue</span> <span class="o">=&gt;</span> <span class="n">e</span>
   <span class="k">if</span> <span class="n">retries</span> <span class="o">&lt;</span> <span class="no">MAX_RETRIES</span>
     <span class="n">retries</span> <span class="o">+=</span> <span class="mi">1</span>
@@ -1039,10 +1145,10 @@ CMD ./h2o <span class="nt">-c</span> /h2o_conf/h2o.conf
   <li>main.js</li>
 </ul>
 
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">document</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="dl">'</span><span class="s1">DOMContentLoaded</span><span class="dl">'</span><span class="p">,</span> <span class="kd">function</span><span class="p">(){</span>
-  <span class="kd">var</span> <span class="nx">xhr</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">XMLHttpRequest</span><span class="p">();</span>
-  <span class="nx">xhr</span><span class="p">.</span><span class="nx">open</span><span class="p">(</span><span class="dl">'</span><span class="s1">get</span><span class="dl">'</span><span class="p">,</span> <span class="dl">'</span><span class="s1">https://192.168.99.100.xip.io/?hoge=fuga</span><span class="dl">'</span><span class="p">);</span>
-  <span class="nx">xhr</span><span class="p">.</span><span class="nx">send</span><span class="p">();</span>
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">document</span><span class="p">.</span><span class="nf">addEventListener</span><span class="p">(</span><span class="dl">'</span><span class="s1">DOMContentLoaded</span><span class="dl">'</span><span class="p">,</span> <span class="kd">function</span><span class="p">(){</span>
+  <span class="kd">var</span> <span class="nx">xhr</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">XMLHttpRequest</span><span class="p">();</span>
+  <span class="nx">xhr</span><span class="p">.</span><span class="nf">open</span><span class="p">(</span><span class="dl">'</span><span class="s1">get</span><span class="dl">'</span><span class="p">,</span> <span class="dl">'</span><span class="s1">https://192.168.99.100.xip.io/?hoge=fuga</span><span class="dl">'</span><span class="p">);</span>
+  <span class="nx">xhr</span><span class="p">.</span><span class="nf">send</span><span class="p">();</span>
 <span class="p">},</span> <span class="kc">false</span><span class="p">);</span>
 </code></pre></div></div>
 
@@ -1574,13 +1680,13 @@ rust_test 10
   <li>Cargo.toml</li>
 </ul>
 
-<div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nn">[package]</span>
-<span class="py">name</span> <span class="p">=</span> <span class="s">"rust"</span>
-<span class="py">version</span> <span class="p">=</span> <span class="s">"0.1.0"</span>
+<div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">[</span><span class="n">package</span><span class="k">]</span>
+<span class="n">name</span> <span class="o">=</span><span class="w"> </span><span class="s">"rust"</span>
+<span class="n">version</span> <span class="o">=</span><span class="w"> </span><span class="s">"0.1.0"</span>
 
-<span class="nn">[lib]</span>
-<span class="py">name</span> <span class="p">=</span> <span class="s">"rust"</span>
-<span class="py">crate-type</span> <span class="p">=</span> <span class="p">[</span><span class="s">"dylib"</span><span class="p">]</span>
+<span class="k">[</span><span class="n">lib</span><span class="k">]</span>
+<span class="n">name</span> <span class="o">=</span><span class="w"> </span><span class="s">"rust"</span>
+<span class="n">crate-type</span> <span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s">"dylib"</span><span class="p">]</span>
 </code></pre></div></div>
 
 <ul>
@@ -1614,8 +1720,8 @@ irb<span class="o">(</span>main<span class="o">)</span>:001:0&gt;
   <li>Cargo.toml</li>
 </ul>
 
-<div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nn">[dependencies]</span>
-<span class="py">libc</span> <span class="p">=</span> <span class="s">"0.2.2"</span>
+<div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">[</span><span class="n">dependencies</span><span class="k">]</span>
+<span class="n">libc</span> <span class="o">=</span><span class="w"> </span><span class="s">"0.2.2"</span>
 </code></pre></div></div>
 
 <p>次に、src/lib.rsを以下のように書き換える。</p>
@@ -1787,284 +1893,4 @@ irb<span class="o">(</span>main<span class="o">)</span>:001:0&gt; Rust.new.fib<s
 <span class="p">}</span>
 </code></pre></div></div>
 
-<p>後は、externの前の行に<code class="language-plaintext highlighter-rouge">#[link(name = "ruby")]</code>と書けば<code class="language-plaintext highlighter-rouge">cargo build</code>でビルドできる。ただ、librubyにリンクされていて依存関係がある所だけ注意しておいたほうがいい。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[この記事は Rust Advent Calendar 2015 10日目の記事です。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry><entry><title type="html">ActiveRecord Sharding</title><link href="https://daichi.dev/posts/2015-12-01-activerecord-sharding" rel="alternate" type="text/html" title="ActiveRecord Sharding" /><published>2015-12-01T00:00:00+09:00</published><updated>2015-12-01T00:00:00+09:00</updated><id>https://daichi.dev/posts/activerecord-sharding</id><content type="html" xml:base="https://daichi.dev/posts/2015-12-01-activerecord-sharding"><![CDATA[<p><a href="/posts/2015-11-19-activerecord-connection">前回</a>の続き</p>
-
-<p>ActiveRecordが実際にDBにクエリを発行する場合<code class="language-plaintext highlighter-rouge">ActiveRecord::Base.connection</code>を経由する。話を単純にする為に、クエリの実行だけに限定してShardingを実現しようと思った場合このメソッドがそれぞれのShardに対して確立されたコネクションを返せば良い。</p>
-
-<p>一番多く採用されている実現方法はconnectionメソッドを上書きしてproxyを経由させるパターンで、多くのGemで採用されている。その他にもコネクションの確立方法・管理などで既存のGemがどうやって実現しているかをいくつか紹介する。</p>
-
-<h2 id="octopus">Octopus</h2>
-
-<p>おそらく一番有名なのかもしれないGem。<a href="https://github.com/kovyrin/db-charmer">kovyrin/db-charmer</a>の影響を少なからず受けている。</p>
-
-<p>実際に置き換えているのは、ActiveRecord::BaseにOctopus::Modelをextendした際に実行されるhijack_methodsで行われている。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/octopus/model.rb</span>
-
-<span class="k">def</span> <span class="nf">hijack_methods</span>
-  <span class="c1"># ...</span>
-
-  <span class="k">class</span> <span class="o">&lt;&lt;</span> <span class="nb">self</span>
-    <span class="c1"># ...</span>
-
-    <span class="n">alias_method_chain</span> <span class="ss">:connection</span><span class="p">,</span> <span class="ss">:octopus</span>
-    <span class="n">alias_method_chain</span> <span class="ss">:connection_pool</span><span class="p">,</span> <span class="ss">:octopus</span>
-    <span class="n">alias_method_chain</span> <span class="ss">:clear_all_connections!</span><span class="p">,</span> <span class="ss">:octopus</span>
-    <span class="n">alias_method_chain</span> <span class="ss">:clear_active_connections!</span><span class="p">,</span> <span class="ss">:octopus</span>
-    <span class="n">alias_method_chain</span> <span class="ss">:connected?</span><span class="p">,</span> <span class="ss">:octopus</span>
-
-    <span class="c1"># ...</span>
-  <span class="k">end</span>
-<span class="k">end</span>
-
-<span class="k">def</span> <span class="nf">connection_with_octopus</span>
-  <span class="k">if</span> <span class="n">should_use_normal_connection?</span>
-    <span class="n">connection_without_octopus</span>
-  <span class="k">else</span>
-    <span class="n">connection_proxy</span><span class="p">.</span><span class="nf">current_model</span> <span class="o">=</span> <span class="nb">self</span>
-    <span class="n">connection_proxy</span>
-  <span class="k">end</span>
-<span class="k">end</span>
-
-<span class="k">def</span> <span class="nf">connection_proxy</span>
-  <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">class_variable_defined?</span><span class="p">(</span><span class="ss">:@@connection_proxy</span><span class="p">)</span> <span class="o">&amp;&amp;</span>
-    <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">class_variable_get</span><span class="p">(</span><span class="ss">:@@connection_proxy</span><span class="p">)</span> <span class="o">||</span>
-    <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">class_variable_set</span><span class="p">(</span><span class="ss">:@@connection_proxy</span><span class="p">,</span> <span class="no">Octopus</span><span class="o">::</span><span class="no">Proxy</span><span class="p">.</span><span class="nf">new</span><span class="p">)</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>Octopus::Proxyはそこそこにツラみを伴うアレなクラスで、Shard毎のコネクションの切り替え以外にもShardへのコネクション確立(プールの作成)と管理もProxyクラス自身で行っている。つまりActiveRecordのConnectionHandlerのような役割を自前で実装している。初めてconnectionが実行されたタイミングでインスタンスが生成され、initalizeで各Shardへのプールを作成する。</p>
-
-<p>内部ではTLSを使ってShardを管理していて、method_missiongでその時に指定されているShardのコネクションを取得してProxyする。簡単なダミーコードで説明すると</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">Thread</span><span class="p">.</span><span class="nf">current</span><span class="p">[</span><span class="ss">:octopus_shard</span><span class="p">]</span>              <span class="c1"># =&gt; nil</span>
-<span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">connection</span><span class="p">.</span><span class="nf">execute</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>  <span class="c1"># =&gt; default connection.</span>
-
-<span class="no">Octopus</span><span class="p">.</span><span class="nf">using</span><span class="p">(</span><span class="ss">:shard1</span><span class="p">)</span> <span class="k">do</span>
-  <span class="no">Thread</span><span class="p">.</span><span class="nf">current</span><span class="p">[</span><span class="ss">:octopus_shard</span><span class="p">]</span>             <span class="c1"># =&gt; :shard1</span>
-  <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">connection</span><span class="p">.</span><span class="nf">execute</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="c1"># =&gt; :shard1 connection.</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>のような感じ。 Shardへの振り分けはProxyのmethod_missingで</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">method_missing</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
-  <span class="k">if</span> <span class="n">should_clean_connection_proxy?</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
-    <span class="n">conn</span> <span class="o">=</span> <span class="n">select_connection</span>
-    <span class="nb">self</span><span class="p">.</span><span class="nf">last_current_shard</span> <span class="o">=</span> <span class="n">current_shard</span>
-    <span class="n">clean_connection_proxy</span>
-    <span class="n">conn</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
-  <span class="k">elsif</span> <span class="n">should_send_queries_to_shard_slave_group?</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
-    <span class="n">send_queries_to_shard_slave_group</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
-  <span class="k">elsif</span> <span class="n">should_send_queries_to_slave_group?</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
-    <span class="n">send_queries_to_slave_group</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
-  <span class="k">elsif</span> <span class="n">should_send_queries_to_replicated_databases?</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
-    <span class="n">send_queries_to_selected_slave</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
-  <span class="k">else</span>
-    <span class="n">select_connection</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
-  <span class="k">end</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>現在のShardに対するconnectionを取得してそのconnectionに対してsendでdelegateする実装になっている。その他にも実際にはRelation・Associationの対応でもう少し作りこみが必要だが基本的な考え方はこれで問題ない。</p>
-
-<h2 id="switchpoint">SwitchPoint</h2>
-
-<p>ShardingではなくR/W splittingに使われているGem。コネクションを切り替えるという点ではだいたい似ているので紹介しておく。軽量なGemで見通しも良いので何か1つガッツリ読みこんで勉強したいのであればこのGemを選択するの良いかもしれない。</p>
-
-<p>SwitchPoint::ModelをincludeしたModelに対してconnectionを差し替える。その後use_switch_pointを実行することでproxyを有効にする。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/switch_point/model.rb</span>
-
-<span class="k">def</span> <span class="nc">self</span><span class="o">.</span><span class="nf">included</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-  <span class="n">model</span><span class="p">.</span><span class="nf">singleton_class</span><span class="p">.</span><span class="nf">class_eval</span> <span class="k">do</span>
-    <span class="kp">include</span> <span class="no">ClassMethods</span>
-    <span class="n">alias_method_chain</span> <span class="ss">:connection</span><span class="p">,</span> <span class="ss">:switch_point</span>
-    <span class="n">alias_method_chain</span> <span class="ss">:cache</span><span class="p">,</span> <span class="ss">:switch_point</span>
-    <span class="n">alias_method_chain</span> <span class="ss">:uncached</span><span class="p">,</span> <span class="ss">:switch_point</span>
-  <span class="k">end</span>
-<span class="k">end</span>
-
-<span class="k">module</span> <span class="nn">ClassMethods</span>
-  <span class="k">def</span> <span class="nf">connection_with_switch_point</span>
-    <span class="k">if</span> <span class="n">switch_point_proxy</span>
-      <span class="n">switch_point_proxy</span><span class="p">.</span><span class="nf">connection</span>
-    <span class="k">else</span>
-      <span class="n">connection_without_switch_point</span>
-    <span class="k">end</span>
-  <span class="k">end</span>
-
-  <span class="k">def</span> <span class="nf">switch_point_proxy</span>
-    <span class="k">if</span> <span class="vi">@switch_point_name</span>
-      <span class="no">ProxyRepository</span><span class="p">.</span><span class="nf">checkout</span><span class="p">(</span><span class="vi">@switch_point_name</span><span class="p">)</span>
-    <span class="k">elsif</span> <span class="nb">self</span> <span class="o">==</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span>
-      <span class="kp">nil</span>
-    <span class="k">else</span>
-      <span class="n">superclass</span><span class="p">.</span><span class="nf">switch_point_proxy</span>
-    <span class="k">end</span>
-  <span class="k">end</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>コネクションはProxyRepository.checkoutのタイミングで未初期化の@switch_point_nameであれば作成される。また、継承関係にも対応していて自身でuse_switch_pointを実行していないクラスは親クラスのproxyをたどることでActiveRecordの様にコネクションを使い回す様になっている。</p>
-
-<p>コネクションの確立方法は、ActiveRecord::Baseを継承するダミークラスを作成してそのクラスを使ってestablish_connectionを実行している。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/switch_point/proxy.rb</span>
-
-<span class="k">def</span> <span class="nf">define_model</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span>
-  <span class="n">model_name</span> <span class="o">=</span> <span class="no">SwitchPoint</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">model_name</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span>
-  <span class="k">if</span> <span class="n">model_name</span>
-    <span class="n">model</span> <span class="o">=</span> <span class="no">Class</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">)</span>
-    <span class="no">Proxy</span><span class="p">.</span><span class="nf">const_set</span><span class="p">(</span><span class="n">model_name</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
-    <span class="n">model</span><span class="p">.</span><span class="nf">establish_connection</span><span class="p">(</span><span class="no">SwitchPoint</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">database_name</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="n">mode</span><span class="p">))</span>
-    <span class="n">model</span>
-  <span class="k">elsif</span> <span class="n">mode</span> <span class="o">==</span> <span class="ss">:readonly</span>
-    <span class="c1"># Re-use writable connection</span>
-    <span class="no">Proxy</span><span class="p">.</span><span class="nf">const_get</span><span class="p">(</span><span class="no">SwitchPoint</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">model_name</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="ss">:writable</span><span class="p">))</span>
-  <span class="k">else</span>
-    <span class="no">Class</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">)</span>
-  <span class="k">end</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>後は必要に応じてクラスを取り出してconnectionを取得する。この方式のいいところはOctopusと違ってestablish_connection経由でのコネクション確立なのでActiveRecordの変更に比較的強い所と、ActiveRecord::BaseのConnectionHandlerに管理を任せられる部分にある(clear_active_connections!等の確保済みコネクションに対する処理の辺り)。</p>
-
-<p>SwitchPointもproxy内部でmodeがTLSで管理されていてreadとwriteのコネクションを切り替える仕組みになっている。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">Article</span><span class="p">.</span><span class="nf">with_readonly</span> <span class="p">{</span> <span class="no">Article</span><span class="p">.</span><span class="nf">first</span> <span class="p">}</span> <span class="c1"># Read from db-blog-slave</span>
-<span class="no">Category</span><span class="p">.</span><span class="nf">with_readonly</span> <span class="p">{</span> <span class="no">Category</span><span class="p">.</span><span class="nf">first</span> <span class="p">}</span> <span class="c1"># Also read from db-blog-slave</span>
-<span class="no">Comment</span><span class="p">.</span><span class="nf">with_readonly</span> <span class="p">{</span> <span class="no">Comment</span><span class="p">.</span><span class="nf">first</span> <span class="p">}</span> <span class="c1"># Read from db-comment-slave</span>
-
-<span class="no">Article</span><span class="p">.</span><span class="nf">with_readonly</span> <span class="k">do</span>
-  <span class="n">article</span> <span class="o">=</span> <span class="no">Article</span><span class="p">.</span><span class="nf">first</span>  <span class="c1"># Read from db-blog-slave</span>
-  <span class="n">article</span><span class="p">.</span><span class="nf">title</span> <span class="o">=</span> <span class="s1">'new title'</span>
-  <span class="no">Article</span><span class="p">.</span><span class="nf">with_writable</span> <span class="k">do</span>
-    <span class="n">article</span><span class="p">.</span><span class="nf">save!</span>  <span class="c1"># Write to db-blog-master</span>
-    <span class="n">article</span><span class="p">.</span><span class="nf">reload</span>  <span class="c1"># Read from db-blog-master</span>
-    <span class="no">Category</span><span class="p">.</span><span class="nf">first</span>  <span class="c1"># Read from db-blog-master</span>
-  <span class="k">end</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<h2 id="activerecordturntable">ActiveRecord::Turntable</h2>
-
-<p>ドリコム製のライブラリ。これまでにあったGemとはアプローチが大きく異なりconnectionを上書きしない。更に<code class="language-plaintext highlighter-rouge">Ocotpus.using</code>のようなShardの指定を明示的に行わずにShardingを実現している。また、クラスタでUniqなIDを生成するためのSequencerが付いてきたりする。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/active_record/turntable/base.rb</span>
-
-<span class="k">def</span> <span class="nf">turntable</span><span class="p">(</span><span class="n">cluster_name</span><span class="p">,</span> <span class="n">shard_key_name</span><span class="p">,</span> <span class="n">options</span> <span class="o">=</span> <span class="p">{})</span>
-  <span class="c1"># ...</span>
-
-  <span class="nb">self</span><span class="p">.</span><span class="nf">turntable_cluster</span> <span class="o">=</span>
-    <span class="nb">self</span><span class="p">.</span><span class="nf">turntable_clusters</span><span class="p">[</span><span class="n">cluster_name</span><span class="p">]</span> <span class="o">||=</span> <span class="no">Cluster</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span>
-                                                <span class="n">turntable_config</span><span class="p">[</span><span class="ss">:clusters</span><span class="p">][</span><span class="n">cluster_name</span><span class="p">],</span>
-                                                <span class="n">options</span>
-                                              <span class="p">)</span>
-  <span class="n">turntable_replace_connection_pool</span>
-<span class="k">end</span>
-
-<span class="k">def</span> <span class="nf">turntable_replace_connection_pool</span>
-  <span class="n">ch</span> <span class="o">=</span> <span class="n">connection_handler</span>
-  <span class="n">cp</span> <span class="o">=</span> <span class="no">ConnectionProxy</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="nb">self</span><span class="p">,</span> <span class="n">turntable_cluster</span><span class="p">)</span>
-  <span class="n">pp</span> <span class="o">=</span> <span class="no">PoolProxy</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="n">cp</span><span class="p">)</span>
-  <span class="n">ch</span><span class="p">.</span><span class="nf">class_to_pool</span><span class="p">.</span><span class="nf">clear</span> <span class="k">if</span> <span class="k">defined?</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="nf">class_to_pool</span><span class="p">)</span>
-  <span class="n">ch</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="ss">:class_to_pool</span><span class="p">)[</span><span class="nb">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">ch</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="ss">:owner_to_pool</span><span class="p">)[</span><span class="nb">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pp</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p><a href="/2015/11/19/activerecord-connection/">前回</a>見たConnectionHandlerのowner_to_poolをConnectionProxyで置き換えている。PoolProxyはプール全体のコネクションに実行する必要のあるメソッドをproxyしている。</p>
-
-<p>コネクションの確立方法はSwitchPoint等と同様に、Shard毎にActiveRecord::Baseを継承するダミークラスを作成してestablish_connectionするパターン。</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">get_or_set_connection_class</span>
-  <span class="k">if</span> <span class="no">Connections</span><span class="p">.</span><span class="nf">const_defined?</span><span class="p">(</span><span class="nb">name</span><span class="p">.</span><span class="nf">classify</span><span class="p">)</span>
-    <span class="n">klass</span> <span class="o">=</span> <span class="no">Connections</span><span class="p">.</span><span class="nf">const_get</span><span class="p">(</span><span class="nb">name</span><span class="p">.</span><span class="nf">classify</span><span class="p">)</span>
-  <span class="k">else</span>
-    <span class="n">klass</span> <span class="o">=</span> <span class="no">Class</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">)</span>
-    <span class="no">Connections</span><span class="p">.</span><span class="nf">const_set</span><span class="p">(</span><span class="nb">name</span><span class="p">.</span><span class="nf">classify</span><span class="p">,</span> <span class="n">klass</span><span class="p">)</span>
-    <span class="n">klass</span><span class="p">.</span><span class="nf">abstract_class</span> <span class="o">=</span> <span class="kp">true</span>
-  <span class="k">end</span>
-  <span class="n">klass</span>
-<span class="k">end</span>
-
-<span class="k">def</span> <span class="nf">create_connection_class</span>
-  <span class="n">klass</span> <span class="o">=</span> <span class="n">get_or_set_connection_class</span>
-  <span class="n">klass</span><span class="p">.</span><span class="nf">remove_connection</span>
-  <span class="n">klass</span><span class="p">.</span><span class="nf">establish_connection</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span><span class="p">.</span><span class="nf">connection_pool</span><span class="p">.</span><span class="nf">spec</span><span class="p">.</span><span class="nf">config</span><span class="p">[</span><span class="ss">:shards</span><span class="p">][</span><span class="nb">name</span><span class="p">].</span><span class="nf">with_indifferent_access</span>
-  <span class="n">klass</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>後は必要に応じてクラスを取り出してconnectionとconnection_poolを取得する。ただ、Turntableの場合は変更が大きすぎて確保済みのコネクションに対する処理などは自前で行う必要があるっぽいけど。</p>
-
-<p>実際にコネクションを切り替える部分は</p>
-
-<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># lib/active_record/turntable/connection_proxy.rb</span>
-
-<span class="k">def</span> <span class="nf">method_missing</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
-  <span class="n">clear_query_cache_if_needed</span><span class="p">(</span><span class="nb">method</span><span class="p">)</span>
-  <span class="k">if</span> <span class="n">shard_fixed?</span>
-    <span class="n">connection</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
-  <span class="k">elsif</span> <span class="n">mixable?</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
-    <span class="n">fader</span> <span class="o">=</span> <span class="vi">@mixer</span><span class="p">.</span><span class="nf">build_fader</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
-    <span class="n">logger</span><span class="p">.</span><span class="nf">debug</span> <span class="p">{</span> <span class="s2">"[ActiveRecord::Turntable] Sending method: </span><span class="si">#{</span><span class="nb">method</span><span class="si">}</span><span class="s2">, "</span> <span class="o">+</span>
-      <span class="s2">"sql: </span><span class="si">#{</span><span class="n">args</span><span class="p">.</span><span class="nf">first</span><span class="si">}</span><span class="s2">, "</span> <span class="o">+</span>
-      <span class="s2">"shards: </span><span class="si">#{</span><span class="n">fader</span><span class="p">.</span><span class="nf">shards_query_hash</span><span class="p">.</span><span class="nf">keys</span><span class="p">.</span><span class="nf">map</span><span class="p">(</span><span class="o">&amp;</span><span class="ss">:name</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span> <span class="p">}</span>
-    <span class="n">fader</span><span class="p">.</span><span class="nf">execute</span>
-  <span class="k">else</span>
-    <span class="n">connection</span><span class="p">.</span><span class="nf">send</span><span class="p">(</span><span class="nb">method</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">block</span><span class="p">)</span>
-  <span class="k">end</span>
-<span class="k">end</span>
-</code></pre></div></div>
-
-<p>となっている。<code class="language-plaintext highlighter-rouge">shard_fixed?</code>はOctopus.usingでShardを指定した時の様に、Shardが指定されていて判定する必要がない場合。通常のクエリなどで判定の必要がある場合には<code class="language-plaintext highlighter-rouge">@mixer.build_fader</code>でクエリから対象のShardを判定している。この中で引数のSQLを<a href="https://github.com/wvanbergen/sql_tree">wvanbergen/sql_tree</a>を使ってSQLをパースして対象Shardを絞り込んでいる。大分マッチョだ。</p>
-
-<h2 id="other">Other</h2>
-
-<p>その他にも、開発が止まってるものやReplication系の物も含めるといくつかライブラリはある。</p>
-
-<ul>
-  <li><a href="https://github.com/taiki45/mixed_gauge">taiki45/mixed_gauge</a></li>
-  <li><a href="https://github.com/zendesk/active_record_shards">zendesk/active_record_shards</a></li>
-  <li><a href="https://github.com/mperham/data_fabric">mperham/data_fabric</a></li>
-  <li><a href="https://github.com/technoweenie/masochism">technoweenie/masochism</a></li>
-  <li><a href="https://github.com/r7kamura/replicat">r7kamura/replicat</a></li>
-  <li><a href="https://github.com/schoefmax/multi_db">schoefmax/multi_db</a></li>
-  <li><a href="https://github.com/mixonic/ShardTheLove">mixonic/ShardTheLove</a></li>
-</ul>
-
-<h2 id="yet-another">Yet Another</h2>
-
-<p>クエリの実行だけに絞って見てきたが、実際には</p>
-
-<ul>
-  <li>Relation</li>
-  <li>Association</li>
-  <li>Migration</li>
-  <li>QueryCache</li>
-  <li>インスタンスの処理
-    <ul>
-      <li>saveなどで呼ばれるtransactionのコネクション指定</li>
-    </ul>
-  </li>
-  <li>その他connection操作
-    <ul>
-      <li>clear_all_connections!</li>
-      <li>clear_active_connections!</li>
-      <li>etc.</li>
-    </ul>
-  </li>
-</ul>
-
-<p>などコネクションの差替え以外にも作りこまなければいけない部分が多い。が、基本的には上で見てきた切替えがベースとなる。</p>
-
-<p>今私が作っているソーシャルゲームはRailsで書いていてDB ShardingはOctopusを使用しているんだけど、なかなか使いづらい所や不満もそこそこにはあったりする。もう直ってるけどコネクションプールを独自で管理してるのでコネクションがリクエストごとにロストしたりしてたこともある。また、他のDB系のライブラリ(annotate_modelsやdatabase_rewinderとか)が手を入れないとうまく動かない。都度パッチを投げても良いんだけど別の実装アイディアもあったりするので、最近プロトタイプ的な感じで1から新しく設計し始めている。</p>
-
-<p>Sharding用のライブラリはザックリと「コネクションの管理」と「シャードの特定」の2つの要素に分解してそれぞれをコンパクトに実装するのが大切だと思っている。コネクションの管理は各シャードへのコネクション確立とModelがクエリを実行するコネクションの切替部分、シャードの特定はその上で実装されるShardingやReplicationのロジックのことを指している。今作ろうとしているものはコネクションの管理をメインに行うつもりだ。</p>
-
-<p>特にコネクション管理をコンパクトに保つのはとても大切で、ActiveRecordの変更に追従するのは非常に困難であることはよく知られている。(実際に<a href="https://github.com/kovyrin/db-charmer">kovyrin/db-charmer</a>の作者は<a href="http://kovyrin.net/2014/11/14/dbcharmer-suspended/">ギブアップ</a>してしまった)コネクションの管理をうまく一般化・抽象化することができればそのGemが土台となって、ActiveRecordとの互換性を気にせず本当に作りたかった機能に注力出来て皆ハッピーみたいな事が出来ればとか考えていたりする。</p>
-
-<p>まあ実際にやってみるとActiveRecordの設計から大きく外れないように設計し、更には内部のAPIなどを極力呼ばない様に作っていくの抜け道を探しているような、パズルをしているような間隔でそれはそれで楽しいものだ。一種の縛りプレイをやっているような感覚に近いかもしれない。</p>
-
-<p>もう少し設計が固まってきたら、また纏めたいと思う。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[前回の続き]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry></feed>
+<p>後は、externの前の行に<code class="language-plaintext highlighter-rouge">#[link(name = "ruby")]</code>と書けば<code class="language-plaintext highlighter-rouge">cargo build</code>でビルドできる。ただ、librubyにリンクされていて依存関係がある所だけ注意しておいたほうがいい。</p>]]></content><author><name></name></author><summary type="html"><![CDATA[この記事は Rust Advent Calendar 2015 10日目の記事です。]]></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://daichi.dev/assets/images/og.png" /><media:content medium="image" url="https://daichi.dev/assets/images/og.png" xmlns:media="http://search.yahoo.com/mrss/" /></entry></feed>

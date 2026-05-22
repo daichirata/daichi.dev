@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title>gcsproxy で Range リクエストに対応した話</title>
+    <link rel="shortcut icon" href="/assets/images/favicon.ico">
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <!-- Begin Jekyll SEO tag v2.9.0 -->
+<meta name="generator" content="Jekyll v4.4.1" />
+<meta property="og:title" content="gcsproxy で Range リクエストに対応した話" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="description" content="自分の趣味で開発している gcsproxy という小さなツールがある。Google Cloud Storage の private なバケットの前段に置いてリバースプロキシとして動かす事で、アクセス制限を別レイヤーに押し付けたり、IAP の後ろで静的サイトを配信したりするためのもの。" />
+<meta name="twitter:description" property="og:description" content="自分の趣味で開発している gcsproxy という小さなツールがある。Google Cloud Storage の private なバケットの前段に置いてリバースプロキシとして動かす事で、アクセス制限を別レイヤーに押し付けたり、IAP の後ろで静的サイトを配信したりするためのもの。" />
+<link rel="canonical" href="https://daichi.dev/posts/2026-05-22-gcsproxy-range" />
+<meta property="og:url" content="https://daichi.dev/posts/2026-05-22-gcsproxy-range" />
+<meta property="og:site_name" content="daichi.dev" />
+<meta property="og:image" content="https://daichi.dev/assets/images/og.png" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2026-05-22T00:00:00+09:00" />
+<meta property="article:modified_time" content="2026-05-22T00:00:00+09:00" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:image" content="https://daichi.dev/assets/images/og.png" />
+<meta name="twitter:title" content="gcsproxy で Range リクエストに対応した話" />
+<meta name="twitter:site" content="@daichirata" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2026-05-22T00:00:00+09:00","datePublished":"2026-05-22T00:00:00+09:00","description":"自分の趣味で開発している gcsproxy という小さなツールがある。Google Cloud Storage の private なバケットの前段に置いてリバースプロキシとして動かす事で、アクセス制限を別レイヤーに押し付けたり、IAP の後ろで静的サイトを配信したりするためのもの。","headline":"gcsproxy で Range リクエストに対応した話","image":"https://daichi.dev/assets/images/og.png","mainEntityOfPage":{"@type":"WebPage","@id":"https://daichi.dev/posts/2026-05-22-gcsproxy-range"},"url":"https://daichi.dev/posts/2026-05-22-gcsproxy-range"}</script>
+<!-- End Jekyll SEO tag -->
+
+  </head>
+  <body class="text-slate-900 antialiased bg-white">
+    <header class="max-w-3xl mx-auto px-4 sm:px-6 py-6 flex items-center justify-between">
+      <a href="/" class="text-lg font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500">daichi.dev</a>
+      <nav class="flex items-center gap-3 text-slate-400">
+        <a href="https://twitter.com/daichirata" target="_blank" rel="noopener noreferrer noopener noreferrer" title="Twitter" class="hover:text-slate-700 transition-colors"><svg height="25" width="25" viewbox="0 0 512 512"><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z" fill="#454C51"></path></svg></a>
+        <a href="https://github.com/daichirata" target="_blank" rel="noopener noreferrer noopener noreferrer" title="GitHub" class="hover:text-slate-700 transition-colors"><svg height="25" width="25" viewbox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" fill="#454C51"></path></svg></a>
+      </nav>
+    </header>
+
+    <article class="max-w-3xl mx-auto px-4 sm:px-6 pb-12">
+  <header class="pt-4 pb-10 mb-10 border-b border-slate-200">
+    <time class="block mb-3 text-xs uppercase tracking-widest text-slate-500 font-semibold" datetime="2026-05-22">2026-05-22</time>
+    <h1 class="text-3xl sm:text-4xl tracking-tight text-slate-900 font-bold leading-tight">gcsproxy で Range リクエストに対応した話</h1>
+  </header>
+
+  <div class="prose prose-slate prose-lg max-w-none content">
+    <p>自分の趣味で開発している <a href="https://github.com/daichirata/gcsproxy" target="_blank" rel="noopener noreferrer">gcsproxy</a> という小さなツールがある。Google Cloud Storage の private なバケットの前段に置いてリバースプロキシとして動かす事で、アクセス制限を別レイヤーに押し付けたり、IAP の後ろで静的サイトを配信したりするためのもの。</p>
+
+<p>このプロジェクトに対して <a href="https://github.com/daichirata/gcsproxy/issues/40" target="_blank" rel="noopener noreferrer">Range リクエストに対応してほしいという Issue</a> がだいぶ前から来ていて、大きなオブジェクトを動画として配信する時のシークや、レジュームダウンロード、CDN からのオリジン読み出しなどでよく使われる機能なので対応してみる事にした。</p>
+
+<p>実は同じ機能を実現する <a href="https://github.com/daichirata/gcsproxy/pull/29" target="_blank" rel="noopener noreferrer">Pull Request #29</a> も既にあって、こちらは Go の stdlib にある <code class="language-plaintext highlighter-rouge">http.ServeContent</code> の内部実装をほぼそのまま gcsproxy 内に持ち込むスタイル。仕組み的にはこれでも動くのだけど 500 行を超える追加になっていて、stdlib の実装の更新を追従しなければいけないことも含めると個人的にはちょっとアプローチが合わないなという感じがあり、一旦 Range について真面目に調べ直して gcsproxy のユースケースに見合った実装を入れる事にした。</p>
+
+<h2 id="range-と-rfc">Range と RFC</h2>
+
+<p>HTTP の <code class="language-plaintext highlighter-rouge">Range</code> ヘッダの仕様は元々 RFC 7233 で定義されていて、現在は HTTP/1.1 の改訂版である <a href="https://httpwg.org/specs/rfc9110.html" target="_blank" rel="noopener noreferrer">RFC 9110</a> に統合されている。</p>
+
+<p>リクエスト側のフォーマットは</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Range: bytes=N-M
+Range: bytes=N-
+Range: bytes=-N
+Range: bytes=0-99,200-299    ← マルチレンジ
+</code></pre></div></div>
+
+<p>の四種類があって、サーバーが range をサポートする場合は</p>
+
+<ul>
+  <li>範囲が満たせる場合: <code class="language-plaintext highlighter-rouge">206 Partial Content</code> + <code class="language-plaintext highlighter-rouge">Content-Range: bytes N-M/&lt;total&gt;</code> で要求された部分を返す</li>
+  <li>範囲が満たせない場合: <code class="language-plaintext highlighter-rouge">416 Range Not Satisfiable</code> + <code class="language-plaintext highlighter-rouge">Content-Range: bytes */&lt;total&gt;</code> を返す</li>
+  <li>マルチレンジを満たす場合: <code class="language-plaintext highlighter-rouge">multipart/byteranges</code> の MIME メッセージとして複数の範囲をまとめて返す</li>
+</ul>
+
+<p>という挙動になる。一方でサーバーが range をサポートしている事を広告するための <code class="language-plaintext highlighter-rouge">Accept-Ranges: bytes</code> ヘッダや、クライアントがキャッシュ整合性のために送る <code class="language-plaintext highlighter-rouge">If-Range</code> ヘッダなど周辺の機能もそれなりにある。</p>
+
+<p>個人的に面白いと思う点として、「Range は MUST じゃない」事がある。つまり Range ヘッダを送って 416 を期待していたところで、サーバーが無視して 200 でフルボディを返しても仕様違反にはならない。<code class="language-plaintext highlighter-rouge">Range: items=0-10</code> のような非 <code class="language-plaintext highlighter-rouge">bytes</code> 単位の指定については RFC 9110 §14.2 に明確に “MUST ignore” と書かれていて、未知の単位を 416 にしてしまうのはむしろ仕様違反になる。</p>
+
+<blockquote>
+  <p>An origin server MUST ignore a Range header field that contains a range unit it does not understand.</p>
+</blockquote>
+
+<p><code class="language-plaintext highlighter-rouge">Range: bytes=abc-def</code> や <code class="language-plaintext highlighter-rouge">Range: bytes=500-100</code> のような Range の構文がそもそも壊れているケースについては、RFC 上は厳密に書かれていない印象。Go の <code class="language-plaintext highlighter-rouge">http.ServeContent</code> のように一律 416 にしているサーバもあれば、エラー時は ignore して 200 で返すサーバもある。リバースプロキシとしては「不正なヘッダで動いていたダウンロードを壊さない」方が運用上嬉しい場面が多いので、gcsproxy では後述するように後者寄せにした。</p>
+
+<h2 id="range-と-content-encoding">Range と Content-Encoding</h2>
+
+<p>GCS 特有の話として、GCS にオブジェクトを <code class="language-plaintext highlighter-rouge">Content-Encoding: gzip</code> 付きでアップロードした場合、ダウンロード時に GCS 側で「解凍済みのバイトを返す」というトランスコーディングがデフォルトで行われる、というのがある。便利な機能ではあるのだけど Range と組み合わせた時の挙動が直感的でなくて、実機で確認したところ次のようになった。</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>=== gzip object (Content-Encoding: gzip, 圧縮済サイズ 40 byte) ===
+NewRangeReader(0,10): len=20  body="0123456789abcdefghij"  ← 解凍済みの全 20 byte が返ってくる
+</code></pre></div></div>
+
+<p>Range で 10 byte を要求したにも関わらず <strong>解凍済みの全 20 byte が返ってくる</strong>。なので gcsproxy としては gzip-stored なオブジェクトに対する Range リクエストは、<code class="language-plaintext highlighter-rouge">NewRangeReader</code> の戻り値を信頼してそのまま返してしまうと「206 を返しているのに body が要求バイト数を超える」という壊れたレスポンスになってしまう。</p>
+
+<p>対応案としては</p>
+
+<ul>
+  <li>そもそも gzip-stored なオブジェクトに対する Range は 416 で返す</li>
+  <li>Range を無視して 200 でフルボディを返す</li>
+</ul>
+
+<p>の二択になるが、リバースプロキシとしては機能的なものは出来るだけ提供したいので 200 フルボディを返す方を選択した。あと一応 <code class="language-plaintext highlighter-rouge">Accept-Ranges: bytes</code> の広告もしないようにして、行儀の良いクライアントが Range を投げない様にしている。</p>
+
+<h2 id="gcsproxy-ではどう実装したか">gcsproxy ではどう実装したか</h2>
+
+<p>Range の細かな仕様や GCS 特有の挙動を踏まえて、結果的に gcsproxy の Range 対応は次のような形に落ち着いた。</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>シナリオ</th>
+      <th>挙動</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>
+<code class="language-plaintext highlighter-rouge">bytes=N-M</code> / <code class="language-plaintext highlighter-rouge">bytes=N-</code> / <code class="language-plaintext highlighter-rouge">bytes=-N</code> で範囲内</td>
+      <td>
+<code class="language-plaintext highlighter-rouge">206 Partial Content</code> + <code class="language-plaintext highlighter-rouge">Content-Range</code> + 要求バイトのみ</td>
+    </tr>
+    <tr>
+      <td>マルチレンジ <code class="language-plaintext highlighter-rouge">bytes=0-99,200-299</code>
+</td>
+      <td>最初の range のみを <code class="language-plaintext highlighter-rouge">206</code> で返す (<code class="language-plaintext highlighter-rouge">multipart/byteranges</code> は非対応)</td>
+    </tr>
+    <tr>
+      <td>範囲外 / <code class="language-plaintext highlighter-rouge">last &lt; first</code> (<code class="language-plaintext highlighter-rouge">bytes=500-100</code>)</td>
+      <td>
+<code class="language-plaintext highlighter-rouge">416 Range Not Satisfiable</code> + <code class="language-plaintext highlighter-rouge">Content-Range: bytes */&lt;size&gt;</code>
+</td>
+    </tr>
+    <tr>
+      <td>非 <code class="language-plaintext highlighter-rouge">bytes</code> 単位 (<code class="language-plaintext highlighter-rouge">items=0-10</code>)</td>
+      <td>
+<code class="language-plaintext highlighter-rouge">200</code> でフルボディ (RFC 9110 §14.2 に従って ignore)</td>
+    </tr>
+    <tr>
+      <td>パース不能 (<code class="language-plaintext highlighter-rouge">bytes=abc-def</code>)</td>
+      <td>
+<code class="language-plaintext highlighter-rouge">200</code> でフルボディ (MUST ignore を拡張)</td>
+    </tr>
+    <tr>
+      <td>
+<code class="language-plaintext highlighter-rouge">Content-Encoding: gzip</code> なオブジェクト</td>
+      <td>
+<code class="language-plaintext highlighter-rouge">200</code> でフルボディ (GCS の transcoding で Range が意味をなさない)</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">If-Range</code></td>
+      <td>第一版では未対応</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="language-plaintext highlighter-rouge">multipart/byteranges</code> 非対応や <code class="language-plaintext highlighter-rouge">If-Range</code> 非対応のような割り切りで実装をかなり小さく保てたのと、GCS の <code class="language-plaintext highlighter-rouge">NewRangeReader(ctx, offset, length)</code> という API が「offset と length を取って Range request を GCS にそのまま投げる」というそのものズバリな仕様だったお陰で、stdlib の <code class="language-plaintext highlighter-rouge">http.ServeContent</code> から実装を持ってくる必要が無く、結果的に追加コードは 100 行強 + テストで 300 行強位に収まった。</p>
+
+<p>stdlib の <code class="language-plaintext highlighter-rouge">http.ServeContent</code> がそれなりに大きいのは、<code class="language-plaintext highlighter-rouge">io.ReadSeeker</code> を入力として汎用的に動くように作られていて、ファイルサイズの取得や Seek 中のエラーハンドリング、<code class="language-plaintext highlighter-rouge">multipart/byteranges</code> のメッセージ生成、conditional request (<code class="language-plaintext highlighter-rouge">If-Match</code> や <code class="language-plaintext highlighter-rouge">If-None-Match</code>) の全セット対応など、汎用 HTTP file server として必要な物が全部入っているからで、gcsproxy のように既に GCS の object メタデータが手元にある状態で range API を呼ぶだけの薄いプロキシとしては必要のない物が大半だった、という構造的な違いがある。</p>
+
+<h2 id="おわり">おわり</h2>
+
+<p>ということで、gcsproxy で Range リクエストに対応しつつ、現実的なエッジケース (特に GCS の gzip transcoding) を踏まえた挙動に落ち着く事が出来た。Range は単純に見える機能の割に Content-Encoding 周りの相互作用が思いの外複雑で、stdlib のソースを読んだり実機で GCS の挙動を確認したりと意外と勉強になった。</p>
+
+<p>仕様としては未対応の <code class="language-plaintext highlighter-rouge">If-Range</code> (リクエストヘッダのバージョンが一致したら range、違ったら full body を返す機能) や、<code class="language-plaintext highlighter-rouge">multipart/byteranges</code> のサポートをどうするかは需要次第というところもあるので、第一版としてはこんなもんかなという感じ。</p>
+
+  </div>
+</article>
+
+
+    <footer class="max-w-3xl mx-auto px-4 sm:px-6 py-12">
+      <p class="text-center text-sm text-slate-500">© 2026 Daichi Hirata</p>
+    </footer>
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-W9BS0Z0NPD"></script>
+<script>
+ window.dataLayer = window.dataLayer || [];
+ function gtag(){dataLayer.push(arguments);}
+ gtag('js', new Date());
+ gtag('config', 'G-W9BS0Z0NPD');
+</script>
+
+  </body>
+</html>
