@@ -6,7 +6,7 @@ title: gcsproxy で Range リクエストに対応した話
 
 このプロジェクトに対して [Range リクエストに対応してほしいという Issue](https://github.com/daichirata/gcsproxy/issues/40) がだいぶ前から来ていて、大きなオブジェクトを動画として配信する時のシークや、レジュームダウンロード、CDN からのオリジン読み出しなどでよく使われる機能なので対応してみる事にした。
 
-実は同じ機能を実現する [Pull Request #29](https://github.com/daichirata/gcsproxy/pull/29) も既にあって、こちらは Go の stdlib にある `http.ServeContent` の内部実装をほぼそのまま gcsproxy 内に持ち込むスタイルでした。仕組み的にはこれでも動くのだけど 500 行を超える追加になっていて、stdlib の実装の更新を追従しなければいけないことも含めると個人的にはちょっとアプローチが合わないなという感じがあり、一旦 Range について真面目に調べ直して gcsproxy のユースケースに見合った実装を入れる事にしてみました。
+実は同じ機能を実現する [Pull Request #29](https://github.com/daichirata/gcsproxy/pull/29) も既にあって、こちらは Go の stdlib にある `http.ServeContent` の内部実装をほぼそのまま gcsproxy 内に持ち込むスタイル。仕組み的にはこれでも動くのだけど 500 行を超える追加になっていて、stdlib の実装の更新を追従しなければいけないことも含めると個人的にはちょっとアプローチが合わないなという感じがあり、一旦 Range について真面目に調べ直して gcsproxy のユースケースに見合った実装を入れる事にした。
 
 ## Range と RFC
 
